@@ -248,7 +248,7 @@ body.dark-theme .navbar.bg-aura-dark {
     border-radius: var(--border-radius-md);
     display: flex;
     flex-direction: column;
-    flex-grow: 1; 
+    flex-grow: 0; 
     /* overflow-y: auto; -- Handled by parent column if needed */
 }
 .results-panel { 
