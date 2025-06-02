@@ -78,7 +78,7 @@ python clop.py \
 
 # BED/GFF files with a reference FASTA file
 
-python dna_clip.py \
+python clop.py \
   --input_file annotations.gff3 \
   --input_type gff3 \
   --reference_fasta reference_genome.fa \
@@ -87,17 +87,17 @@ python dna_clip.py \
 
 # Resuming from checkpoint
 
-python dna_clip.py \
+python clop.py \
   --resume_from_checkpoint output/best_model_checkpoint.pth \
   --output_dir continued_training
 
 # Running tests
 
-python dna_clip.py --test_suite
+python clop.py --test_suite
 
 # Running on a dummy example (for a quick demo)
 
-python dna_clip.py --run_dummy_example
+python clop.py --run_dummy_example
 ```
 
 ## Input file formats
