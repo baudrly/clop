@@ -1,63 +1,176 @@
-# CLOP: Contrastive Language-Omics Pre-training
+# CLOP: Contrastive Learning for Omics Pre-training
 
-## Project description
+CLOP is a PyTorch implementation of a CLIP-like model for learning joint embeddings of DNA sequences and their textual annotations. The model can be trained on FASTA, BED, or GFF3 files to learn meaningful representations that enable cross-modal retrieval and classification. It focuses on species and biotype as primary annotations and optional futher descriptions.
 
-CLOP aims to provide a shared embedding for omics (DNA, RNA, protein) sequences and their functions which can be used to perform downstream analysis at high speed.
+A live demo (embedding visualization, classification) is available [here](https://baudrly.github.io/clop).
 
-It is based on the CLIP architecture, which jointly trains an image transformer and a text transformer to project respectively pictures and captions into the same embedding space.
+## Features
 
-In CLOP, we use [Frequency Chaos Game Representation](https://www.sciencedirect.com/science/article/pii/S2001037021004736) to represent DNA sequences as a "fingerprint" image of fixed dimension.
+- **Dual-Encoder Architecture**: Separate encoders for DNA sequences and text annotations
+- **Multiple Input Formats**:
+  - FASTA (with metadata in headers)
+  - BED (with reference FASTA)
+  - GFF3 (with reference FASTA)
+- **Tokenization Options**:
+  - K-mer tokenization for DNA
+  - Character-level tokenization for DNA
+  - Customizable text tokenization
+- **Training Features**:
+  - Contrastive loss with learnable temperature
+  - Mixed-precision training (AMP)
+  - Learning rate scheduling
+  - Early stopping
+- **Evaluation Metrics**:
+  - Retrieval metrics (MRR, Recall@K)
+  - k-NN classification
+  - Clustering metrics (Silhouette, Davies-Bouldin)
+- **Export Options**:
+  - ONNX format
+  - TensorFlow.js (via ONNX)
+  - Embedding exports (CSV/Parquet)
+- **Comprehensive Reporting**:
+  - Markdown and PDF reports
+  - Embedding visualizations (PCA, t-SNE, UMAP)
+  - Training curves
 
-This transformation allows us to work with sequences of very different lengths without limitations related to context window.
+## Installation
 
-We directly fine-tune the CLIP transformers using these DNA images and function texts.
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/yourusername/clop.git
+   cd clop
+   ```
 
-## Status
+2. Install requirements:
+  ```bash
+  pip install torch numpy pandas scikit-learn matplotlib seaborn pygments fpdf2
+  ```
 
-The fine-tuning of the model could not be done in time, there are 2 wip demos:
-* A telegram bot is available to return the image representation of input DNA sequences: https://t.me/clip_clop_bot
-* A mock interface on GitHub pages to propose related functions to an input sequence: https://baudrly.github.io/clop/
+Also, optionally:
+  
+  ```bash
+  # For GFF3 parsing and advanced visualization
+  pip install pyfaidx umap-learn
 
+  # For Parquet export
+  pip install polars
 
-## Use cases
+  # For ONNX export
+  pip install onnx onnxruntime onnx-tf
 
-The shared embedding can be used directly for various downstream genomic analysis, such as predicting the function of an input sequence, finding closely related sequences with similar functions, or for zero shot classification of DNA sequences (e.g. to detect contaminating sequences).
+  # For TensorFlow.js export
+  pip install tensorflow tensorflowjs
+  ```
 
-```mermaid
+## Basic usage
 
-graph LR
+```bash
+# Direct FASTA file input
 
-    subgraph func[Function prediction]
-        CLOPFUN[CLOP]
-    end
-    subgraph fuzz[Fuzzy matching]
-        CLOPFUZ[CLOP]
-        MATCH["🧬🧬🧬"]
-    end
-    subgraph zero[Zero shot classification]
-        CLOPZERO[CLOP]
-    end
-  AFUN["🧬"] -->|embed| CLOPFUN
-  CLOPFUN -->|closest texts| FUN["Antibiotic resistance\nAntibiotic degradation"]
-  AFUZ["🧬"] -->|embed| CLOPFUZ
-  CLOPFUZ -->|closest dna| MATCH
-  AZER["🧬"] -->|embed| CLOPZERO
-  DOL["🐬"] -->|embed| CLOPZERO
-  BAC["🦠"] -->|embed| CLOPZERO
-  CLOPZERO --> |similarity| DOLSIM["🐬, 🧬"]
-  CLOPZERO --> |similarity| BACSIM["🦠, 🧬"]
-  BACSIM --> MAX
-  DOLSIM --> MAX
-  MAX --> SELECT["🦠"]
+python clop.py \
+  --input_file your_data.fasta \
+  --input_type fasta \
+  --output_dir output \
+  --dna_tokenizer_type kmer \
+  --kmer_k 6 \
+  --epochs 20 \
+  --batch_size 32
 
+# BED/GFF files with a reference FASTA file
+
+python dna_clip.py \
+  --input_file annotations.gff3 \
+  --input_type gff3 \
+  --reference_fasta reference_genome.fa \
+  --output_dir gff3_output \
+  --gff_feature_types gene,mRNA,ncRNA_gene
+
+# Resuming from checkpoint
+
+python dna_clip.py \
+  --resume_from_checkpoint output/best_model_checkpoint.pth \
+  --output_dir continued_training
+
+# Running tests
+
+python dna_clip.py --test_suite
+
+# Running on a dummy example (for a quick demo)
+
+python dna_clip.py --run_dummy_example
 ```
 
-## Training data
+## Input file formats
 
-For this demo, we restricted the training set to human transcript sequences (version GRCh38) and their functional annotations, available to download from https://www.ncbi.nlm.nih.gov/genome/guide/human/
+### FASTA
+It's recommended that fasta files follow this convention (Species/Biotype/Description):
+```
+>sequence_id|species=Human|biotype=protein_coding|description=Example gene
+ATGCGTACGTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT
+```
+The script is designed to be compatible with [chromosample](https://github.com/baudrly/chromosample).
 
-We further subsampled 50,000 sequence-annotation pairs for the fine-tuning experiment.
+### BED Format
 
-## Acknowledgement
+Standard BED format (6+ columns) with reference FASTA.
 
-This project originated at the 2023 SDSC-hackathon on Generative AI. It was initiated by the team Swiss-Androsace (see members in the [LICENSE](./LICENSE) copyright notice).
+### GFF3 Format
+
+Standard GFF3 format with reference FASTA. Use `--gff_feature_types` to specify which feature types to process.
+
+## Output structure
+
+The script creates the following directory structure:
+
+```
+output_dir/
+├── reports/               # Generated plots and reports
+├── best_model_checkpoint.pth  # Best model weights
+├── checkpoint_epoch_*.pth    # Periodic checkpoints
+├── dna_tokenizer_vocab.json  # DNA tokenizer vocabulary
+├── text_tokenizer_vocab.json # Text tokenizer vocabulary
+├── final_embeddings.csv      # Exported embeddings (if enabled)
+├── dna_encoder.onnx          # ONNX export (if enabled)
+├── text_encoder.onnx         # ONNX export (if enabled)
+└── tfjs_*/                  # TensorFlow.js exports (if enabled)
+```
+
+## Advanced options
+
+### Model Architecture
+
+```
+--embedding_dim: Dimension of embeddings (default: 128)
+
+--hidden_dim: LSTM hidden dimension (default: 256)
+
+--num_layers: Number of LSTM layers (default: 1)
+
+--dropout: Dropout rate (default: 0.1)
+```
+
+### Training Parameters
+
+```
+--learning_rate: Initial learning rate (default: 1e-3)
+
+--weight_decay: L2 penalty (default: 0.01)
+
+--lr_scheduler_patience: Epochs before reducing LR (default: 3)
+
+--early_stopping_patience: Epochs before early stop (default: 5)
+
+--use_amp: Enable mixed-precision training
+
+--use_torch_compile: Use torch.compile() optimization (PyTorch 2.0+)
+```
+
+### Export Options
+
+```
+--export_onnx: Export encoders to ONNX format
+
+--export_tfjs: Export ONNX encoders to TensorFlow.js
+
+--export_embeddings_format: Export format for embeddings (csv, parquet, both, none)
+```
