@@ -55,18 +55,32 @@ async function plotEmbeddings(embeddingData, plotElementId, colorByAttribute, pl
                     processedData = simplePca(rawEmbeddings, 2);
                     break;
                 case 'tsne':
-                    if (typeof sk !== 'object' || !sk.manifold || !sk.manifold.TSNE) {
-                        throw new Error("scikit-js (for t-SNE) is not loaded.");
+                    if (typeof TSNE === 'undefined') {
+                        throw new Error("tsne-js library is not loaded.");
                     }
                     if (numSamples < 5) throw new Error("t-SNE requires at least 5 samples.");
                     if (reductionWarningDiv) reductionWarningDiv.style.display = 'block';
-                    const tsne = new sk.manifold.TSNE({
-                        nComponents: 2,
-                        perplexity: Math.min(30, numSamples - 1), 
-                        nIter: Math.max(250, numSamples * 3), 
-                        randomState: 42
+
+                    const tsneOptions = {
+                        dim: 2,
+                        perplexity: Math.min(30, numSamples - 1),
+                        earlyExaggeration: 4.0,
+                        learningRate: 100.0,
+                        nIter: Math.max(250, numSamples * 3), // This library uses nIter for the final optimization phase
+                        metric: 'euclidean'
+                    };
+                    
+                    const model = new TSNE(tsneOptions);
+                    
+                    model.init({
+                        data: rawEmbeddings,
+                        type: 'dense'
                     });
-                    processedData = tsne.fitTransform(rawEmbeddings);
+                    
+                    // Run t-SNE. This is a synchronous, blocking call that executes all steps.
+                    model.run();
+                    
+                    processedData = model.getOutput();
                     break;
                 case 'umap':
                     if (typeof UMAP === 'undefined') {
@@ -80,7 +94,7 @@ async function plotEmbeddings(embeddingData, plotElementId, colorByAttribute, pl
                         minDist: 0.1,
                         randomState: 42 
                     });
-                    processedData = umap.fitTransform(rawEmbeddings);
+                    processedData = umap.fit(rawEmbeddings);
                     break;
                 case 'none':
                 default:
@@ -269,7 +283,6 @@ async function plotEmbeddings(embeddingData, plotElementId, colorByAttribute, pl
     }
 }
 
-// displaySingleSequenceClassification (from "Ultra Fix 1")
 function displaySingleSequenceClassification(sequenceData, classificationResults, containerElement) {
     const resultCard = document.createElement('div');
     resultCard.className = 'sequence-result-card-enhanced';
@@ -296,23 +309,72 @@ function displaySingleSequenceClassification(sequenceData, classificationResults
         }
     }
 
+    function renderSimilar(title, sequences) {
+        if (sequences && sequences.length > 0) {
+            content += `<div class="classification-title-enhanced">${title}:</div>`;
+            sequences.slice(0, topN).forEach(res => {
+                const percentage = ((res.similarity + 1) / 2 * 100);
+                const displaySimilarity = res.similarity.toFixed(3);
+                const resLabel = res.id || res.header || 'Unknown Sequence';
+                
+                // Build detailed description
+                let description = `<strong>${resLabel}</strong>`;
+                if (res.biotype && res.biotype !== 'Unknown') {
+                    description += ` <span class="badge bg-primary-subtle text-primary-emphasis">${res.biotype}</span>`;
+                }
+                if (res.species && res.species !== 'Unknown') {
+                    description += ` <span class="badge bg-info-subtle text-info-emphasis">${res.species}</span>`;
+                }
+                
+                // Add sequence snippet if available
+                if (res.sequence || res.sequence_snippet) {
+                    const seq = res.sequence || res.sequence_snippet;
+                    const seqSnippet = seq.substring(0, 40);
+                    description += `<br><small class="text-muted font-monospace">${seqSnippet}${seq.length > 40 ? '...' : ''}</small>`;
+                }
+                
+                // Add annotation/description if available
+                if (res.annotation) {
+                    const annSnippet = res.annotation.length > 80 ? res.annotation.substring(0, 80) + '...' : res.annotation;
+                    description += `<br><small class="text-secondary">${annSnippet}</small>`;
+                } else if (res.raw_annotation) {
+                    const annSnippet = res.raw_annotation.length > 80 ? res.raw_annotation.substring(0, 80) + '...' : res.raw_annotation;
+                    description += `<br><small class="text-secondary">${annSnippet}</small>`;
+                }
+                
+                content += `<div class="similar-sequence-result mb-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">${description}</div>
+                        <div class="ms-2">
+                            <span class="badge bg-success" title="Similarity: ${displaySimilarity}">${displaySimilarity}</span>
+                        </div>
+                    </div>
+                    <div class="score-bar-container-enhanced mt-1">
+                        <div class="score-bar-value" style="width: ${Math.max(2, percentage)}%; background-color: #28a745;" title="Similarity: ${displaySimilarity}"></div>
+                    </div>
+                </div>`;
+            });
+        }
+    }
+
     renderScores('Biotype', classificationResults.biotype);
     renderScores('Species', classificationResults.species);
     renderScores('Custom Prompts', classificationResults.custom);
+    renderSimilar('Most Similar DB Sequences', classificationResults.similar);
     
     const hasResults = (classificationResults.biotype && classificationResults.biotype.length > 0) ||
                        (classificationResults.species && classificationResults.species.length > 0) ||
-                       (classificationResults.custom && classificationResults.custom.length > 0);
+                       (classificationResults.custom && classificationResults.custom.length > 0) ||
+                       (classificationResults.similar && classificationResults.similar.length > 0);
 
     if (!hasResults) {
-        content += `<p class="text-muted-ultra small mt-2">No classification scores above threshold or an error occurred.</p>`;
+        content += `<p class="text-muted-ultra small mt-2">No classification scores found or an error occurred.</p>`;
     }
 
     resultCard.innerHTML = content;
     containerElement.appendChild(resultCard);
 }
 
-// displayTokenizationPreview (from "Ultra Fix 1")
 function displayTokenizationPreview(sequenceType, originalInput, tokens, encodedIds, containerElement) {
     if (!containerElement) return;
     let previewHtml = `<div class="tokenization-preview-ultra">

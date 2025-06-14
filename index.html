@@ -173,6 +173,10 @@
                                         <label for="kmer-size-input" class="form-label form-label-ultra small">K-mer Size (DNA)</label>
                                         <input type="number" id="kmer-size-input" class="form-control form-control-sm form-control-ultra" value="6" min="1" max="10">
                                     </div>
+                                    <div id="embedding-classification-indicator" class="alert alert-info-ultra small p-2 mb-3" style="display:none;">
+                                        <i class="fas fa-database me-1"></i> <strong>Embedding database loaded!</strong><br>
+                                        <span id="embedding-db-info"></span>
+                                    </div>
                                     <div class="mb-3">
                                         <label for="biotype-labels-input" class="form-label form-label-ultra small">Target Biotypes <small>(comma-sep.)</small></label>
                                         <textarea id="biotype-labels-input" class="form-control form-control-sm form-control-ultra" rows="2"></textarea>
@@ -296,31 +300,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apache-arrow@16.0.0/Arrow.es2015.min.js"></script>
-    <script type="module">
-        try {
-            const pqWasmModule = await import('https://cdn.jsdelivr.net/npm/parquet-wasm@0.6.1/esm/parquet_wasm.js');
-            if (typeof pqWasmModule.default === 'function' && !pqWasmModule.default.readParquet) {
-                window.parquetWasm = await pqWasmModule.default(); 
-                console.log("parquet-wasm (ESM) initialized (from default export).");
-            } else if (typeof pqWasmModule.default === 'object' && typeof pqWasmModule.default.readParquet === 'function') {
-                 window.parquetWasm = pqWasmModule.default; 
-                 console.log("parquet-wasm (ESM) API directly assigned (from default export).");
-            }
-            else if (typeof pqWasmModule === 'function' && !pqWasmModule.readParquet) {
-                 window.parquetWasm = await pqWasmModule();
-                 console.log("parquet-wasm (ESM) initialized (module was init).");
-            } else if (typeof pqWasmModule.readParquet === 'function') {
-                window.parquetWasm = pqWasmModule; 
-                console.log("parquet-wasm (ESM) module itself is the API object.");
-            } else {
-                console.warn("parquet-wasm (ESM) loaded, but its structure is unexpected.", pqWasmModule);
-            }
-        } catch (err) {
-            console.error("Error loading or initializing parquet-wasm (ESM):", err);
-            window.parquetWasm = null; 
-        }
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/scikitjs@1.24.0/dist/scikit.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/tsne-js@1.0.3/build/tsne.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/umap-js@1.3.3/lib/umap-js.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
@@ -329,6 +310,39 @@
     <script src="js/visualizations.js"></script>
     <script src="js/classification.js"></script>
     <script src="js/ui.js"></script>
+    <!-- Module loading script - must come before app.js -->
+    <script type="module">
+        window.moduleLoadingComplete = false;
+        try {
+            // Load parquet-wasm with a different approach
+            const parquetWasm = await import('https://cdn.jsdelivr.net/npm/parquet-wasm@0.6.1/esm/parquet_wasm.js');
+            
+            // Initialize the WASM module
+            await parquetWasm.default();
+            
+            // Now the functions should be available directly on the module
+            window.parquetWasmModule = parquetWasm;
+            console.log("parquet-wasm loaded and initialized");
+            
+            // Make scikit-js available globally (it's already loaded via script tag)
+            if (typeof window.scikitjs !== 'undefined') {
+                window.sk = window.scikitjs;
+                console.log("scikit-js already loaded via script tag");
+            } else {
+                console.warn("scikit-js not found on window");
+            }
+        } catch (err) {
+            console.error("Error loading modules:", err);
+            window.parquetWasmModule = null; 
+        }
+        window.moduleLoadingComplete = true;
+        
+        // Dispatch event to signal modules are loaded
+        window.dispatchEvent(new Event('modulesLoaded'));
+    </script>
+    
+    <!-- Load app.js after module loading script -->
     <script src="js/app.js"></script>
+
 </body>
 </html>

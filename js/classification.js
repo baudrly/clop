@@ -107,14 +107,21 @@ class TextTokenizerClient {
  */
 
 async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaTokenizer, textTokenizer, config) {
-    if (!textLabels || textLabels.length === 0) return { results: [], dnaTokenData: null, textTokenData: [] };
+    if (!textLabels || textLabels.length === 0) {
+        console.debug("No text labels provided for classification.");
+        return { results: [], dnaTokenData: null, textTokenData: [] };
+    }
 
-    // Get ONNX names from config
+    // Get ONNX names from config - these should match what the Python script exports
     const { 
         maxDnaLen, maxTextLen,
-        onnxInputNameDnaIds, onnxInputNameDnaMask, onnxOutputNameDnaEmbedding,
-        onnxInputNameTextIds, onnxInputNameTextMask, onnxOutputNameTextEmbedding
-    } = config; // config is now currentConfig passed from app.js
+        onnxInputNameDnaIds = 'dna_tokens', 
+        onnxInputNameDnaMask = 'dna_lengths', 
+        onnxOutputNameDnaEmbedding = 'dna_embedding',
+        onnxInputNameTextIds = 'text_tokens', 
+        onnxInputNameTextMask = 'text_lengths', 
+        onnxOutputNameTextEmbedding = 'text_embedding'
+    } = config;
 
     let dnaEmbedding;
     const dnaEncoded = dnaTokenizer.encode(dnaSequence, maxDnaLen);
@@ -127,23 +134,28 @@ async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaT
 
     if (onnxSession) {
         try {
+            // For DNA: create tensors matching what the Python model expects
+            console.debug("DNA Encoded IDs:", dnaEncoded.ids);
             const dnaInputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(dnaEncoded.ids.map(BigInt)), [1, dnaEncoded.ids.length]);
-            const dnaAttentionMaskTensor = new ort.Tensor('int64', BigInt64Array.from(dnaEncoded.attention_mask.map(BigInt)), [1, dnaEncoded.attention_mask.length]);
+            // For lengths, the Python model expects a scalar tensor with the actual sequence length
+            const dnaLengthsTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(dnaEncoded.length)]), [1]);
             
             const dnaFeeds = {};
             dnaFeeds[onnxInputNameDnaIds] = dnaInputIdsTensor;
-            dnaFeeds[onnxInputNameDnaMask] = dnaAttentionMaskTensor;
+            dnaFeeds[onnxInputNameDnaMask] = dnaLengthsTensor; // This is actually lengths, not mask
             
-            const dnaResults = await onnxSession.run(dnaFeeds, [onnxOutputNameDnaEmbedding]);
+            console.debug("DNA Feeds for ONNX:", dnaFeeds);
+            const dnaResults = await onnxSession.run(dnaFeeds);
+            console.debug("DNA Embedding Results:", dnaResults);
             dnaEmbedding = Array.from(dnaResults[onnxOutputNameDnaEmbedding].data);
 
         } catch (e) {
             console.error("ONNX DNA encoding error:", e);
             showToast(`ONNX DNA Error: ${e.message.substring(0,100)}...`, 'danger-ultra', 7000);
-            dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 16);
+            dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 128); // Use larger embedding dim
         }
     } else {
-        dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 16);
+        dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 128);
     }
 
     const results = [];
@@ -161,26 +173,33 @@ async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaT
 
         if (onnxSession) {
             try {
+                console.debug(`Text Encoded IDs for label "${label}":`, textEncoded.ids);
                 const textInputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(textEncoded.ids.map(BigInt)), [1, textEncoded.ids.length]);
-                const textAttentionMaskTensor = new ort.Tensor('int64', BigInt64Array.from(textEncoded.attention_mask.map(BigInt)), [1, textEncoded.attention_mask.length]);
+                const textLengthsTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(textEncoded.length)]), [1]);
                 
                 const textFeeds = {};
                 textFeeds[onnxInputNameTextIds] = textInputIdsTensor;
-                textFeeds[onnxInputNameTextMask] = textAttentionMaskTensor;
+                textFeeds[onnxInputNameTextMask] = textLengthsTensor; // This is actually lengths, not mask
 
-                const textResults = await onnxSession.run(textFeeds, [onnxOutputNameTextEmbedding]);
+                console.debug(`Text Feeds for ONNX for label "${label}":`, textFeeds);
+                const textResults = await onnxSession.run(textFeeds);
+                console.debug(`Text Embedding Results for label "${label}":`, textResults);
                 textEmbedding = Array.from(textResults[onnxOutputNameTextEmbedding].data);
             } catch (e) {
                 console.error(`ONNX Text encoding error for "${label}":`, e);
                 showToast(`ONNX Text Error ("${label}"): ${e.message.substring(0,80)}...`, 'danger-ultra', 7000);
-                textEmbedding = simulateEmbedding(label, 'text', undefined, 16);
+                textEmbedding = simulateEmbedding(label, 'text', undefined, 128);
             }
         } else {
-            textEmbedding = simulateEmbedding(label, 'text', undefined, 16);
+            textEmbedding = simulateEmbedding(label, 'text', undefined, 128);
         }
         
+        console.debug(`DNA Embedding:`, dnaEmbedding);
+        console.debug(`Text Embedding for label "${label}":`, textEmbedding);
         const similarity = cosineSimilarity(dnaEmbedding, textEmbedding);
-        results.push({ label: label, score: (similarity + 1) / 2 });
+        if (!isNaN(similarity)) {
+             results.push({ label: label, score: (similarity + 1) / 2 });
+        }
     }
 
     return {
@@ -191,9 +210,9 @@ async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaT
 }
 
 /**
- * Simulates an embedding. Uses a fixed dimension for consistency.
+ * Simulates an embedding. Uses the actual embedding dimension from the model.
  */
-function simulateEmbedding(input, type, k = 6, dim = 16) {
+function simulateEmbedding(input, type, k = 6, dim = 64) {
     const embedding = Array(dim).fill(0);
     let charsToProcess;
     if (type === 'dna') {
@@ -203,9 +222,170 @@ function simulateEmbedding(input, type, k = 6, dim = 16) {
         charsToProcess = input.toLowerCase().split('');
     }
     if (charsToProcess.length === 0) return embedding;
+    
+    // Create a more realistic simulation based on sequence content
     for (let i = 0; i < charsToProcess.length; i++) {
-        embedding[i % dim] += (charsToProcess[i].charCodeAt(0) % 100) / 100.0 + (i * 0.01); // Add variance
+        const charCode = charsToProcess[i].charCodeAt(0);
+        embedding[i % dim] += (charCode % 100) / 100.0 + (i * 0.01);
     }
+    
+    // Add some sequence-specific variation
+    for (let i = 0; i < dim; i++) {
+        embedding[i] += (Math.sin(i + input.length) * 0.1);
+    }
+    
     const norm = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
     return norm > 0 ? embedding.map(val => val / norm) : embedding;
+}
+
+/**
+ * Performs embedding-based classification using pre-computed embeddings.
+ * Finds the k-nearest neighbors in the embedding space.
+ * @param {Array<number>} queryEmbedding The embedding of the query sequence
+ * @param {Array<Object>} embeddingDatabase Array of objects with embeddings and metadata
+ * @param {string} attributeType 'biotype' or 'species' to classify
+ * @param {number} k Number of nearest neighbors to consider
+ * @returns {Array<{label: string, score: number, count: number}>} Sorted results
+ */
+function classifyByEmbeddingSimilarity(queryEmbedding, embeddingDatabase, attributeType = 'biotype', k = 10) {
+    if (!queryEmbedding || queryEmbedding.length === 0 || !embeddingDatabase || embeddingDatabase.length === 0) {
+        console.warn('Missing query embedding or database for classification');
+        return [];
+    }
+    
+    console.log(`Starting classification for ${attributeType} with query embedding dim: ${queryEmbedding.length}`);
+    
+    // Calculate similarities to all database entries
+    const similarities = embeddingDatabase.map((entry, index) => {
+        // Try different embedding sources in order of preference
+        let targetEmbedding = entry.dna_embeddings || entry.text_embeddings || entry.embeddings;
+        
+        if (!targetEmbedding || targetEmbedding.length === 0) {
+            return null;
+        }
+        
+        // Check dimension compatibility
+        if (targetEmbedding.length !== queryEmbedding.length) {
+            // Try to find a compatible embedding
+            if (entry.dna_embeddings && entry.dna_embeddings.length === queryEmbedding.length) {
+                targetEmbedding = entry.dna_embeddings;
+            } else if (entry.text_embeddings && entry.text_embeddings.length === queryEmbedding.length) {
+                targetEmbedding = entry.text_embeddings;
+            } else {
+                return null; // Skip incompatible entries
+            }
+        }
+        
+        const similarity = cosineSimilarity(queryEmbedding, targetEmbedding);
+        if (isNaN(similarity)) {
+            return null;
+        }
+        
+        return { index, similarity, entry };
+    }).filter(item => item !== null);
+    
+    console.log(`Calculated similarities for ${similarities.length} entries out of ${embeddingDatabase.length} total`);
+    
+    if (similarities.length === 0) {
+        console.warn('No valid similarities calculated');
+        return [];
+    }
+    
+    // Log similarity distribution for debugging
+    const simValues = similarities.map(s => s.similarity);
+    const minSim = Math.min(...simValues);
+    const maxSim = Math.max(...simValues);
+    const avgSim = simValues.reduce((sum, val) => sum + val, 0) / simValues.length;
+    console.log(`Similarity range: min=${minSim.toFixed(4)}, max=${maxSim.toFixed(4)}, avg=${avgSim.toFixed(4)}`);
+    
+    // Sort by similarity and take top k
+    const topK = similarities
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, k);
+    
+    console.log(`Top ${Math.min(k, similarities.length)} similarities for ${attributeType}:`, 
+        topK.map(s => ({ 
+            similarity: s.similarity.toFixed(4), 
+            label: s.entry[attributeType],
+            id: s.entry.id 
+        }))
+    );
+    
+    // Aggregate scores by attribute
+    const scoresByLabel = {};
+    const countsByLabel = {};
+    const similaritiesByLabel = {};
+    
+    topK.forEach(({ entry, similarity }) => {
+        const label = entry[attributeType] || 'Unknown';
+        if (!scoresByLabel[label]) {
+            scoresByLabel[label] = [];
+            countsByLabel[label] = 0;
+            similaritiesByLabel[label] = [];
+        }
+        scoresByLabel[label].push(similarity);
+        countsByLabel[label]++;
+        similaritiesByLabel[label].push(similarity);
+    });
+    
+    // Convert to array and calculate more nuanced scores
+    const results = Object.entries(scoresByLabel).map(([label, similarities]) => {
+        const count = countsByLabel[label];
+        const avgSimilarity = similarities.reduce((sum, sim) => sum + sim, 0) / similarities.length;
+        const maxSimilarity = Math.max(...similarities);
+        
+        // Use raw similarity as score (don't artificially inflate)
+        // Weight by count (more occurrences = higher confidence)
+        const countWeight = Math.min(1.0, count / 3); // Cap the count bonus
+        const rawScore = avgSimilarity * 0.8 + maxSimilarity * 0.2;
+        const finalScore = rawScore * (0.7 + 0.3 * countWeight);
+        
+        return {
+            label,
+            score: Math.max(0, Math.min(1, finalScore)), // Ensure 0-1 range
+            count,
+            avgSimilarity: avgSimilarity,
+            maxSimilarity: maxSimilarity,
+            rawScore: rawScore
+        };
+    });
+    
+    const sortedResults = results.sort((a, b) => b.score - a.score);
+    console.log(`Final classification results for ${attributeType}:`, sortedResults.map(r => ({
+        label: r.label,
+        score: r.score.toFixed(4),
+        rawScore: r.rawScore.toFixed(4),
+        avgSim: r.avgSimilarity.toFixed(4),
+        count: r.count
+    })));
+    
+    return sortedResults;
+}
+/**
+ * Gets the most similar sequences from the embedding database
+ * @param {Array<number>} queryEmbedding The embedding of the query sequence
+ * @param {Array<Object>} embeddingDatabase Array of objects with embeddings and metadata
+ * @param {number} topN Number of similar sequences to return
+ * @returns {Array<Object>} Top similar sequences with similarity scores
+ */
+function findSimilarSequences(queryEmbedding, embeddingDatabase, topN = 5) {
+    if (!queryEmbedding || queryEmbedding.length === 0 || !embeddingDatabase || embeddingDatabase.length === 0) {
+        return [];
+    }
+    
+    const similarities = embeddingDatabase.map(entry => {
+        const targetEmbedding = entry.dna_embeddings || entry.embeddings;
+        const similarity = cosineSimilarity(queryEmbedding, targetEmbedding);
+        
+        if (isNaN(similarity)) {
+            return null;
+        }
+        
+        return { ...entry, similarity };
+    });
+    
+    return similarities
+        .filter(s => s !== null)
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, topN);
 }

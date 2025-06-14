@@ -129,12 +129,18 @@ function displayEmbeddingFileInfo(file, numPoints, numDimensions) {
     const infoDiv = document.getElementById('embedding-file-info');
     if (!infoDiv) return;
     infoDiv.innerHTML = `
+        <div class="d-flex align-items-center mb-2">
+            <i class="fas fa-check-circle text-success me-2"></i>
+            <strong class="text-success">File Successfully Loaded</strong>
+        </div>
         <strong class="d-block mb-1"><i class="fas fa-file-alt me-1 text-primary-gradient"></i> ${file.name}</strong>
+        <span class="badge bg-success me-1"><i class="fas fa-check me-1"></i>Loaded</span>
         <span class="badge bg-light-subtle text-dark-emphasis me-1">${(file.size / 1024).toFixed(1)} KB</span>
         <span class="badge bg-info-subtle text-info-emphasis me-1">${numPoints} points</span>
         <span class="badge bg-info-subtle text-info-emphasis">${numDimensions} dims</span>
     `;
     infoDiv.style.display = 'block';
+    infoDiv.classList.add('border', 'border-success', 'rounded', 'p-2', 'bg-success-subtle');
 }
 
 function clearEmbeddingFileInfo() { 
@@ -147,6 +153,11 @@ function clearEmbeddingFileInfo() {
     if (statsDiv) statsDiv.innerHTML = '';
      const plotContainer = document.getElementById('embedding-plot-container');
     if(plotContainer) plotContainer.innerHTML = '<div class="plot-placeholder"><i class="fas fa-atom fa-3x text-placeholder mb-2"></i><p>Visualize your high-dimensional biological data.</p></div>';
+    
+    // Clear embedding classification indicator
+    const indicator = document.getElementById('embedding-classification-indicator');
+    if (indicator) indicator.style.display = 'none';
+    
     window.currentEmbeddingDataForPlot = null;
 }
 

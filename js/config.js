@@ -11,11 +11,11 @@ const DEFAULT_CONFIG = {
     defaultBiotypes: "gene, protein_coding, lncRNA, enhancer, promoter, tRNA, rRNA, repeat, pseudogene",
     defaultSpecies: "Homo sapiens, Mus musculus, Danio rerio, Drosophila melanogaster, Saccharomyces cerevisiae, Arabidopsis thaliana",
     classificationTopN: 5, // Number of top results to show
-    onnxInputNameDnaIds: "dna_input_ids",
-    onnxInputNameDnaMask: "dna_attention_mask",
+    onnxInputNameDnaIds: "dna_tokens",
+    onnxInputNameDnaMask: "dna_lengths",
     onnxOutputNameDnaEmbedding: "dna_embedding",
-    onnxInputNameTextIds: "text_input_ids",
-    onnxInputNameTextMask: "text_attention_mask",
+    onnxInputNameTextIds: "text_tokens",
+    onnxInputNameTextMask: "text_lengths",
     onnxOutputNameTextEmbedding: "text_embedding",
 
     // Embedding Plot

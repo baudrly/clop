@@ -6,28 +6,35 @@ let currentTextTokenizer = new TextTokenizerClient();
 window.currentEmbeddingDataForPlot = null;
 window.lastPlotLayout = null; 
 window.lastPlotTraces = null; 
-// window.parquetWasmModule is now set directly by the ESM script in index.html
+
+// Store the ONNX model metadata
+let onnxModelMetadata = {
+    dnaInputNames: null,
+    dnaOutputNames: null,
+    textInputNames: null,
+    textOutputNames: null
+};
 
 async function initializeApp() {
     loadConfig(); 
     initEventListeners();
     populateDummyFastaSelect();
 
-    if (window.parquetWasm && typeof window.parquetWasm.readParquet === 'function') {
-        console.log("parquet-wasm API (readParquet) is available on window.parquetWasm.");
+    // Add a small delay to ensure module scripts have completed
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (window.parquetWasmModule && typeof window.parquetWasmModule.readParquet === 'function') {
+        console.log("parquet-wasm API (readParquet) is available on window.parquetWasmModule.");
     } else {
-        console.warn("parquet-wasm API not available on window.parquetWasm after ESM script execution. Parquet uploads might fail or use fallback initialization in parser.");
+        console.warn("parquet-wasm API not available on window.parquetWasmModule after ESM script execution. Parquet uploads might fail.");
     }
 
     if (typeof Plotly === 'undefined') {
         console.error("Plotly.js is not loaded!");
         showToast("Plotting library (Plotly) failed to load. Visualizations will be affected.", "danger-ultra", 10000);
     }
-    if (typeof sk === 'undefined') {
-        console.warn("scikit-js (for t-SNE) not loaded. t-SNE will not be available.");
-    }
-    if (typeof UMAP === 'undefined') {
-        console.warn("UMAP-JS not loaded. UMAP will not be available.");
+    if (typeof window.scikitjs === 'undefined' && typeof window.sk === 'undefined') {
+        console.warn("scikit-js not loaded. t-SNE and advanced PCA will not be available.");
     }
 }
 
@@ -100,7 +107,6 @@ function handleSaveSettings() {
 async function rePlotEmbeddingsWithCurrentData() { 
     if (window.currentEmbeddingDataForPlot) {
         try {
-            // No spinner here
             await plotEmbeddings( 
                 window.currentEmbeddingDataForPlot,
                 'embedding-plot-container',
@@ -118,52 +124,125 @@ async function rePlotEmbeddingsWithCurrentData() {
     }
 }
 
+/**
+ * Extracts unique biotypes and species from embedding data and populates the
+ * corresponding textareas in the UI.
+ * @param {Array<Object>} embeddingData The array of loaded embedding objects.
+ */
+function updateClassificationLabelsFromData(embeddingData) {
+    if (!embeddingData || embeddingData.length === 0) return;
+
+    const biotypes = [...new Set(embeddingData.map(d => d.biotype).filter(b => b && b !== 'Unknown'))].sort();
+    const species = [...new Set(embeddingData.map(d => d.species).filter(s => s && s !== 'Unknown'))].sort();
+    
+    const biotypeInput = document.getElementById('biotype-labels-input');
+    if (biotypeInput && biotypes.length > 0) {
+        biotypeInput.value = biotypes.join(', ');
+        showToast(`Updated biotype labels from loaded data.`, 'info', 2500);
+    }
+
+    const speciesInput = document.getElementById('species-labels-input');
+    if (speciesInput && species.length > 0) {
+        speciesInput.value = species.join(', ');
+         showToast(`Updated species labels from loaded data.`, 'info', 2500);
+    }
+}
+
 async function handleEmbeddingFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    // showSpinner('Parsing embedding file...'); // REMOVED
-    const loadingIndicator = document.getElementById('embedding-loading-indicator'); // Optional: use a more local indicator
+    
+    const loadingIndicator = document.getElementById('embedding-loading-indicator');
+    const fileInput = document.getElementById('embedding-file-input');
+    
+    // Show loading state
     if(loadingIndicator) loadingIndicator.style.display = 'block';
-
+    fileInput.classList.add('border-warning');
+    
+    // Add loading visual cue
+    const fileInputParent = fileInput.parentElement;
+    const loadingBadge = document.createElement('span');
+    loadingBadge.className = 'badge bg-warning ms-2';
+    loadingBadge.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+    loadingBadge.id = 'upload-loading-badge';
+    fileInputParent.appendChild(loadingBadge);
 
     const format = document.getElementById('embedding-format-select').value;
 
     try {
         let data;
         if (format === 'json') {
-            const fileContent = await readFileAsText(file); data = JSON.parse(fileContent);
+            const fileContent = await readFileAsText(file); 
+            data = JSON.parse(fileContent);
         } else if (format === 'csv') {
-            const fileContent = await readFileAsText(file); data = parseCSVEmbeddings(fileContent);
+            const fileContent = await readFileAsText(file); 
+            data = parseCSVEmbeddings(fileContent);
         } else if (format === 'parquet') {
-            const arrayBuffer = await readFileAsArrayBuffer(file); data = await parseParquetEmbeddings(arrayBuffer);
-        } else { throw new Error("Unsupported format."); }
+            const arrayBuffer = await readFileAsArrayBuffer(file); 
+            data = await parseParquetEmbeddings(arrayBuffer);
+        } else { 
+            throw new Error("Unsupported format."); 
+        }
         
         if (!Array.isArray(data) || data.length === 0 || !data.every(item => Array.isArray(item.embeddings) && item.embeddings.length > 0)) {
             throw new Error("Data format error or embeddings missing/empty.");
         }
+        
         window.currentEmbeddingDataForPlot = data;
         ensureSequenceMetrics(window.currentEmbeddingDataForPlot); 
         displayEmbeddingFileInfo(file, data.length, data[0].embeddings.length);
+        
+        updateEmbeddingClassificationIndicator(data);
+        updateClassificationLabelsFromData(data);
+        
         await plotEmbeddings( 
             data,
             'embedding-plot-container',
             document.getElementById('color-by-select').value,
             document.getElementById('embedding-plot-type').value
         );
-        showToast('Embeddings loaded!', 'success-ultra');
+        
+        // Success visual cues
+        fileInput.classList.remove('border-warning');
+        fileInput.classList.add('border-success');
+        showToast('Embeddings loaded successfully!', 'success-ultra');
+        
     } catch (error) {
         console.error("Embedding File Error:", error);
         showToast(`Embedding Error: ${error.message}`, 'danger-ultra', 7000);
         clearEmbeddingFileInfo();
+        fileInput.classList.remove('border-warning');
+        fileInput.classList.add('border-danger');
+        setTimeout(() => fileInput.classList.remove('border-danger'), 3000);
     } finally {
-        // hideSpinner(); // REMOVED
         if(loadingIndicator) loadingIndicator.style.display = 'none';
+        const loadingBadgeToRemove = document.getElementById('upload-loading-badge');
+        if (loadingBadgeToRemove) loadingBadgeToRemove.remove();
+        fileInput.classList.remove('border-warning');
         event.target.value = null;
     }
 }
 
+function updateEmbeddingClassificationIndicator(embeddingData) {
+    const indicator = document.getElementById('embedding-classification-indicator');
+    const info = document.getElementById('embedding-db-info');
+    
+    if (!indicator || !info) return;
+    
+    if (!embeddingData || embeddingData.length === 0 || !(embeddingData[0].dna_embeddings || embeddingData[0].embeddings)) {
+        indicator.style.display = 'none';
+        return;
+    }
+    
+    // Count unique biotypes and species
+    const biotypes = new Set(embeddingData.map(d => d.biotype).filter(b => b && b !== 'Unknown'));
+    const species = new Set(embeddingData.map(d => d.species).filter(s => s && s !== 'Unknown'));
+    
+    info.innerHTML = `${embeddingData.length} sequences with ${biotypes.size} biotypes, ${species.size} species`;
+    indicator.style.display = 'block';
+}
+
 async function loadDummyEmbeddings() {
-    // showSpinner('Loading example embeddings...'); // REMOVED
     const loadingIndicator = document.getElementById('embedding-loading-indicator');
     if(loadingIndicator) loadingIndicator.style.display = 'block';
     try {
@@ -173,6 +252,10 @@ async function loadDummyEmbeddings() {
         window.currentEmbeddingDataForPlot = data;
         ensureSequenceMetrics(window.currentEmbeddingDataForPlot);
         displayEmbeddingFileInfo({name: "Example Embeddings", size: 0}, data.length, data[0].embeddings.length); 
+        
+        updateEmbeddingClassificationIndicator(data);
+        updateClassificationLabelsFromData(data);
+        
         await plotEmbeddings( 
             data,
             'embedding-plot-container',
@@ -184,7 +267,6 @@ async function loadDummyEmbeddings() {
         showToast(`Load Dummy Error: ${error.message}`, 'danger-ultra');
         clearEmbeddingFileInfo();
     } finally { 
-        // hideSpinner(); // REMOVED
         if(loadingIndicator) loadingIndicator.style.display = 'none';
     }
 }
@@ -192,19 +274,44 @@ async function loadDummyEmbeddings() {
 async function handleFastaFileUpload(event) { 
     const file = event.target.files[0];
     if (!file) return;
-    // showSpinner('Reading FASTA...'); // REMOVED
+    
+    const fileInput = event.target;
+    fileInput.classList.add('border-warning');
+    
+    const fileInputParent = fileInput.parentElement;
+    const loadingBadge = document.createElement('span');
+    loadingBadge.className = 'badge bg-warning ms-2';
+    loadingBadge.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
+    loadingBadge.id = 'fasta-loading-badge';
+    fileInputParent.appendChild(loadingBadge);
+    
     try {
         const fastaContent = await readFileAsText(file);
         document.getElementById('fasta-text-input').value = fastaContent;
-        showToast('FASTA file loaded.', 'info');
-    } catch (error) { showToast(`FASTA Read Error: ${error.message}`, 'danger-ultra');
-    } finally { /* hideSpinner(); */ event.target.value = null; } // REMOVED
+        
+        // Success visual cues
+        fileInput.classList.remove('border-warning');
+        fileInput.classList.add('border-success');
+        showToast(`FASTA file loaded successfully: ${file.name}`, 'success');
+        setTimeout(() => fileInput.classList.remove('border-success'), 3000);
+        
+    } catch (error) { 
+        showToast(`FASTA Read Error: ${error.message}`, 'danger-ultra');
+        fileInput.classList.remove('border-warning');
+        fileInput.classList.add('border-danger');
+        setTimeout(() => fileInput.classList.remove('border-danger'), 3000);
+    } finally { 
+        const loadingBadgeToRemove = document.getElementById('fasta-loading-badge');
+        if (loadingBadgeToRemove) loadingBadgeToRemove.remove();
+        fileInput.classList.remove('border-warning');
+        event.target.value = null; 
+    }
 }
+
 async function handleFastaUrlFetch() { 
     const urlInput = document.getElementById('fasta-url-input');
     const url = urlInput.value;
     if (!url) { showToast('Please enter a URL.', 'warning'); return; }
-    // showSpinner('Fetching FASTA...'); // REMOVED
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -212,8 +319,9 @@ async function handleFastaUrlFetch() {
         document.getElementById('fasta-text-input').value = fastaContent;
         showToast('FASTA fetched successfully.', 'info');
     } catch (error) { showToast(`FASTA Fetch Error: ${error.message}. Check CORS.`, 'danger-ultra', 7000);
-    } finally { /* hideSpinner(); */ } // REMOVED
+    }
 }
+
 function loadSelectedDummyFasta() { 
     const selectElement = document.getElementById('dummy-fasta-select');
     const idx = parseInt(selectElement.value, 10);
@@ -227,64 +335,266 @@ function loadSelectedDummyFasta() {
 async function handleONNXModelUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    // showSpinner('Loading ONNX model...'); // REMOVED
     try {
         const modelBuffer = await readFileAsArrayBuffer(file);
-        currentONNXSession = await loadONNXModel(modelBuffer);
-        showToast('ONNX model loaded.', 'success-ultra');
-    } catch (error) { showToast(`ONNX Load Error: ${error.message}`, 'danger-ultra', 7000); currentONNXSession = null;
-    } finally { /* hideSpinner(); */ event.target.value = null; } // REMOVED
+        
+        // First, check if it's the DNA or text encoder by trying to load and inspect
+        const tempSession = await ort.InferenceSession.create(modelBuffer);
+        
+        // Get input/output names from the model
+        const inputNames = tempSession.inputNames;
+        const outputNames = tempSession.outputNames;
+        
+        // Try to determine if this is DNA or text encoder based on input/output names
+        const isDnaEncoder = inputNames.some(name => 
+            name.toLowerCase().includes('dna') || 
+            name === 'tokens' && outputNames.some(out => out.toLowerCase().includes('dna'))
+        );
+        
+        const isTextEncoder = inputNames.some(name => 
+            name.toLowerCase().includes('text') || 
+            name === 'tokens' && outputNames.some(out => out.toLowerCase().includes('text'))
+        );
+        
+        if (isDnaEncoder || (!isDnaEncoder && !isTextEncoder && file.name.toLowerCase().includes('dna'))) {
+            // Store DNA encoder metadata
+            onnxModelMetadata.dnaInputNames = inputNames;
+            onnxModelMetadata.dnaOutputNames = outputNames;
+            
+            // Update config with detected names
+            if (inputNames.length >= 2) {
+                const tokenInput = inputNames.find(n => n.includes('token') || n === 'dna_tokens') || inputNames[0];
+                const lengthInput = inputNames.find(n => n.includes('length') || n === 'dna_lengths') || inputNames[1];
+                
+                saveConfig({
+                    onnxInputNameDnaIds: tokenInput,
+                    onnxInputNameDnaMask: lengthInput
+                });
+            }
+            if (outputNames.length >= 1) {
+                saveConfig({
+                    onnxOutputNameDnaEmbedding: outputNames[0]
+                });
+            }
+        }
+        
+        if (isTextEncoder || (!isDnaEncoder && !isTextEncoder && file.name.toLowerCase().includes('text'))) {
+            // Store text encoder metadata
+            onnxModelMetadata.textInputNames = inputNames;
+            onnxModelMetadata.textOutputNames = outputNames;
+            
+            // Update config with detected names
+            if (inputNames.length >= 2) {
+                const tokenInput = inputNames.find(n => n.includes('token') || n === 'text_tokens') || inputNames[0];
+                const lengthInput = inputNames.find(n => n.includes('length') || n === 'text_lengths') || inputNames[1];
+                
+                saveConfig({
+                    onnxInputNameTextIds: tokenInput,
+                    onnxInputNameTextMask: lengthInput
+                });
+            }
+            if (outputNames.length >= 1) {
+                saveConfig({
+                    onnxOutputNameTextEmbedding: outputNames[0]
+                });
+            }
+        }
+        
+        // For now, we'll use the same session for both DNA and text encoding
+        // In a real implementation, you might want to load separate models
+        currentONNXSession = tempSession;
+        
+        showToast(`ONNX model loaded. Detected ${inputNames.length} inputs: ${inputNames.join(', ')}`, 'success-ultra');
+        
+        // Update UI to reflect detected names
+        applyConfigToUI();
+        
+    } catch (error) { 
+        showToast(`ONNX Load Error: ${error.message}`, 'danger-ultra', 7000); 
+        currentONNXSession = null;
+    } finally { 
+        event.target.value = null; 
+    }
 }
+
 async function handleVocabUpload(event, vocabType) { 
     const file = event.target.files[0];
     if (!file) return;
-    // showSpinner(`Loading ${vocabType} vocabulary...`); // REMOVED
+    
+    const fileInput = event.target;
+    fileInput.classList.add('border-warning');
+    
+    // Add loading badge
+    const fileInputParent = fileInput.parentElement;
+    const loadingBadge = document.createElement('span');
+    loadingBadge.className = 'badge bg-warning ms-2';
+    loadingBadge.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
+    loadingBadge.id = `${vocabType}-vocab-loading-badge`;
+    fileInputParent.appendChild(loadingBadge);
+    
     try {
         const vocabContent = await readFileAsText(file);
         const vocabData = JSON.parse(vocabContent);
-        if (Object.keys(vocabData).length === 0) throw new Error("Vocab empty.");
-        if (vocabType === 'dna') {
-            currentDnaTokenizer = new DNATokenizerClient(getConfigValue('kmerSize'), vocabData);
-            showToast('DNA vocabulary loaded.', 'success-ultra');
-        } else if (vocabType === 'text') {
-            currentTextTokenizer = new TextTokenizerClient(vocabData);
-            showToast('Text vocabulary loaded.', 'success-ultra');
+        
+        // Check if this is a vocab file from clop.py (has 'vocab' and possibly 'k' keys)
+        let actualVocab = vocabData;
+        let kmerSize = null;
+        
+        if (vocabData.vocab && typeof vocabData.vocab === 'object') {
+            actualVocab = vocabData.vocab;
+            if (vocabData.k) {
+                kmerSize = vocabData.k;
+            }
         }
-    } catch (error) { showToast(`Vocab Load Error (${vocabType}): ${error.message}`, 'danger-ultra', 7000);
-    } finally { /* hideSpinner(); */ event.target.value = null; } // REMOVED
+        
+        if (Object.keys(actualVocab).length === 0) throw new Error("Vocab empty.");
+        
+        if (vocabType === 'dna') {
+            currentDnaTokenizer = new DNATokenizerClient(kmerSize || getConfigValue('kmerSize'), actualVocab);
+            if (kmerSize) {
+                // Update k-mer size in config if it was in the vocab file
+                saveConfig({ kmerSize: kmerSize });
+                applyConfigToUI();
+            }
+            
+            // Success visual cues
+            fileInput.classList.remove('border-warning');
+            fileInput.classList.add('border-success');
+            
+            // Add success badge
+            const successBadge = document.createElement('span');
+            successBadge.className = 'badge bg-success ms-2';
+            successBadge.innerHTML = `<i class="fas fa-check me-1"></i>DNA Vocab (${Object.keys(actualVocab).length} tokens${kmerSize ? `, k=${kmerSize}` : ''})`;
+            successBadge.id = 'dna-vocab-success-badge';
+            fileInputParent.appendChild(successBadge);
+            
+            showToast(`DNA vocabulary loaded (${Object.keys(actualVocab).length} tokens${kmerSize ? `, k=${kmerSize}` : ''}).`, 'success-ultra');
+            
+        } else if (vocabType === 'text') {
+            currentTextTokenizer = new TextTokenizerClient(actualVocab);
+            
+            // Success visual cues
+            fileInput.classList.remove('border-warning');
+            fileInput.classList.add('border-success');
+            
+            // Add success badge
+            const successBadge = document.createElement('span');
+            successBadge.className = 'badge bg-success ms-2';
+            successBadge.innerHTML = `<i class="fas fa-check me-1"></i>Text Vocab (${Object.keys(actualVocab).length} tokens)`;
+            successBadge.id = 'text-vocab-success-badge';
+            fileInputParent.appendChild(successBadge);
+            
+            showToast(`Text vocabulary loaded (${Object.keys(actualVocab).length} tokens).`, 'success-ultra');
+        }
+        
+        setTimeout(() => fileInput.classList.remove('border-success'), 3000);
+        
+    } catch (error) { 
+        showToast(`Vocab Load Error (${vocabType}): ${error.message}`, 'danger-ultra', 7000);
+        fileInput.classList.remove('border-warning');
+        fileInput.classList.add('border-danger');
+        setTimeout(() => fileInput.classList.remove('border-danger'), 3000);
+    } finally { 
+        const loadingBadgeToRemove = document.getElementById(`${vocabType}-vocab-loading-badge`);
+        if (loadingBadgeToRemove) loadingBadgeToRemove.remove();
+        fileInput.classList.remove('border-warning');
+        event.target.value = null; 
+    }
 }
+
 async function loadDummyVocabularies() { 
-    // showSpinner('Loading example vocabularies...'); // REMOVED
+    const dnaInput = document.getElementById('dna-vocab-input');
+    const textInput = document.getElementById('text-vocab-input');
+    
+    // Add loading visual cues
+    dnaInput.classList.add('border-warning');
+    textInput.classList.add('border-warning');
+    
     try {
         const [dnaRes, textRes] = await Promise.all([fetch(dummyDnaVocabPath), fetch(dummyTextVocabPath)]);
         if (!dnaRes.ok) throw new Error(`DNA Vocab HTTP ${dnaRes.status}`);
         if (!textRes.ok) throw new Error(`Text Vocab HTTP ${textRes.status}`);
-        const dnaVocabData = await dnaRes.json(); const textVocabData = await textRes.json();
+        const dnaVocabData = await dnaRes.json(); 
+        const textVocabData = await textRes.json();
         currentDnaTokenizer = new DNATokenizerClient(getConfigValue('kmerSize'), dnaVocabData); 
         currentTextTokenizer = new TextTokenizerClient(textVocabData);
+        
+        // Success visual cues
+        dnaInput.classList.remove('border-warning');
+        dnaInput.classList.add('border-success');
+        textInput.classList.remove('border-warning');
+        textInput.classList.add('border-success');
+        
+        // Add success badges
+        const dnaParent = dnaInput.parentElement;
+        const textParent = textInput.parentElement;
+        
+        // Remove any existing badges
+        const existingDnaBadge = document.getElementById('dna-vocab-success-badge');
+        const existingTextBadge = document.getElementById('text-vocab-success-badge');
+        if (existingDnaBadge) existingDnaBadge.remove();
+        if (existingTextBadge) existingTextBadge.remove();
+        
+        const dnaSuccessBadge = document.createElement('span');
+        dnaSuccessBadge.className = 'badge bg-success ms-2';
+        dnaSuccessBadge.innerHTML = `<i class="fas fa-check me-1"></i>Example DNA Vocab (k=${getConfigValue('kmerSize')})`;
+        dnaSuccessBadge.id = 'dna-vocab-success-badge';
+        dnaParent.appendChild(dnaSuccessBadge);
+        
+        const textSuccessBadge = document.createElement('span');
+        textSuccessBadge.className = 'badge bg-success ms-2';
+        textSuccessBadge.innerHTML = `<i class="fas fa-check me-1"></i>Example Text Vocab`;
+        textSuccessBadge.id = 'text-vocab-success-badge';
+        textParent.appendChild(textSuccessBadge);
+        
         showToast(`Example vocabs (DNA k=${getConfigValue('kmerSize')}) loaded.`, 'success-ultra');
-    } catch (error) { showToast(`Dummy Vocab Error: ${error.message}`, 'danger-ultra');
-    } finally { /* hideSpinner(); */ } // REMOVED
+        
+        setTimeout(() => {
+            dnaInput.classList.remove('border-success');
+            textInput.classList.remove('border-success');
+        }, 3000);
+        
+    } catch (error) { 
+        showToast(`Dummy Vocab Error: ${error.message}`, 'danger-ultra');
+        dnaInput.classList.remove('border-warning');
+        dnaInput.classList.add('border-danger');
+        textInput.classList.remove('border-warning');
+        textInput.classList.add('border-danger');
+        setTimeout(() => {
+            dnaInput.classList.remove('border-danger');
+            textInput.classList.remove('border-danger');
+        }, 3000);
+    }
 }
-
 async function processAndClassifyFasta() {
     const fastaText = document.getElementById('fasta-text-input').value;
     if (!fastaText.trim()) { showToast('FASTA input is empty.', 'warning'); return; }
 
-    // showSpinner('Parsing FASTA...'); await delay(50); // REMOVED
-    document.getElementById('process-fasta-btn').disabled = true; // Disable button during processing
-    await delay(50); // Allow UI to update (button disable)
+    document.getElementById('process-fasta-btn').disabled = true;
+    await delay(50);
 
     const parsedSequences = parseFasta(fastaText);
     if (parsedSequences.length === 0) { 
-        // hideSpinner(); // REMOVED
         document.getElementById('process-fasta-btn').disabled = false;
         showToast('No valid FASTA sequences found.', 'warning'); return; 
     }
 
+    // Check if we have embeddings loaded for similarity-based classification
+    const useEmbeddingClassification = window.currentEmbeddingDataForPlot && 
+                                     window.currentEmbeddingDataForPlot.length > 0 &&
+                                     window.currentEmbeddingDataForPlot.some(d => d.dna_embeddings && d.dna_embeddings.length > 0);
+
+    // Get the custom text labels from the input fields
     const biotypeLabels = document.getElementById('biotype-labels-input').value.split(',').map(s => s.trim()).filter(s => s);
     const speciesLabels = document.getElementById('species-labels-input').value.split(',').map(s => s.trim()).filter(s => s);
     const customPrompts = document.getElementById('custom-prompts-input').value.split('\n').map(s => s.trim()).filter(s => s);
+    
+    // For embedding-based classification, we don't need labels
+    if (!useEmbeddingClassification && biotypeLabels.length === 0 && speciesLabels.length === 0 && customPrompts.length === 0) {
+        document.getElementById('process-fasta-btn').disabled = false;
+        showToast('Please provide classification labels OR load an embedding database for similarity-based classification.', 'warning', 7000);
+        return;
+    }
     
     if (currentDnaTokenizer.k !== getConfigValue('kmerSize')) { 
         currentDnaTokenizer = new DNATokenizerClient(getConfigValue('kmerSize'), currentDnaTokenizer.vocab);
@@ -297,40 +607,181 @@ async function processAndClassifyFasta() {
     tokenizationPreviewContainer.innerHTML = '';
     updateTotalSequencesClassified(0);
 
-    // showSpinner(`Classifying ${parsedSequences.length} sequences...`); // REMOVED
     let sequencesProcessed = 0;
     updateClassificationProgress(0, parsedSequences.length);
 
     try { 
         for (const seqData of parsedSequences) {
             try {
-                const classificationPayload = { biotype: [], species: [], custom: [] };
-                let firstDnaTokenData = null, firstTextTokenData = null;
-                const classificationConfig = { ...currentConfig }; 
-
-                if (biotypeLabels.length > 0) {
-                    const r = await zeroShotClassifySingle(seqData.sequence, biotypeLabels, currentONNXSession, currentDnaTokenizer, currentTextTokenizer, classificationConfig);
-                    classificationPayload.biotype = r.results; if (!firstDnaTokenData) firstDnaTokenData = r.dnaTokenData; if (!firstTextTokenData && r.textTokenData.length > 0) firstTextTokenData = r.textTokenData[0];
+                let classificationPayload = { biotype: [], species: [], custom: [], similar: [] };
+                let firstDnaTokenData = null;
+                
+        if (useEmbeddingClassification) {
+            // Get embedding for the query sequence using the loaded embedding database
+            let queryEmbedding;
+            
+            if (currentONNXSession) {
+                // Use ONNX model to get real embedding
+                const dnaEncoded = currentDnaTokenizer.encode(seqData.sequence, getConfigValue('maxDnaLen'));
+                const dnaInputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(dnaEncoded.ids.map(BigInt)), [1, dnaEncoded.ids.length]);
+                const dnaLengthsTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(dnaEncoded.length)]), [1]);
+                
+                const dnaFeeds = {};
+                dnaFeeds[getConfigValue('onnxInputNameDnaIds')] = dnaInputIdsTensor;
+                dnaFeeds[getConfigValue('onnxInputNameDnaMask')] = dnaLengthsTensor;
+                
+                try {
+                    const dnaResults = await currentONNXSession.run(dnaFeeds);
+                    queryEmbedding = Array.from(dnaResults[getConfigValue('onnxOutputNameDnaEmbedding')].data);
+                } catch (e) {
+                    console.error("ONNX DNA encoding error:", e);
+                    queryEmbedding = null; // Will use database-based approach below
                 }
-                if (speciesLabels.length > 0) {
-                    const r = await zeroShotClassifySingle(seqData.sequence, speciesLabels, currentONNXSession, currentDnaTokenizer, currentTextTokenizer, classificationConfig);
-                    classificationPayload.species = r.results; if (!firstDnaTokenData) firstDnaTokenData = r.dnaTokenData; if (!firstTextTokenData && r.textTokenData.length > 0) firstTextTokenData = r.textTokenData[0];
+                
+                firstDnaTokenData = {
+                    type: 'DNA',
+                    input: dnaEncoded.original_input,
+                    tokens: dnaEncoded.original_tokens,
+                    ids: dnaEncoded.ids.slice(0, dnaEncoded.length)
+                };
+            }
+            
+            // If no ONNX model or ONNX failed, use the embedding database for similarity
+            if (!queryEmbedding) {
+                // Find the most similar sequence using cosine similarity of k-mer frequencies
+                const querySeq = seqData.sequence.toUpperCase();
+                let bestMatch = null;
+                let bestScore = -1;
+                
+                const kmerSize = currentDnaTokenizer.k || getConfigValue('kmerSize') || 4;
+                
+                console.log(`Finding best sequence match using k-mer cosine similarity (k=${kmerSize})`);
+                
+                for (const dbEntry of window.currentEmbeddingDataForPlot) {
+                    if (dbEntry.sequence || dbEntry.sequence_snippet) {
+                        const dbSeq = (dbEntry.sequence || dbEntry.sequence_snippet).toUpperCase();
+                        // Use cosine similarity based on k-mer frequencies
+                        const similarity = calculateSequenceCosineSimilarity(querySeq, dbSeq, kmerSize);
+                        if (similarity > bestScore) {
+                            bestScore = similarity;
+                            bestMatch = dbEntry;
+                        }
+                    }
                 }
-                if (customPrompts.length > 0) {
-                    const r = await zeroShotClassifySingle(seqData.sequence, customPrompts, currentONNXSession, currentDnaTokenizer, currentTextTokenizer, classificationConfig);
-                    classificationPayload.custom = r.results; if (!firstDnaTokenData) firstDnaTokenData = r.dnaTokenData; if (!firstTextTokenData && r.textTokenData.length > 0) firstTextTokenData = r.textTokenData[0];
+                
+                if (bestMatch && (bestMatch.dna_embeddings || bestMatch.embeddings)) {
+                    queryEmbedding = bestMatch.dna_embeddings || bestMatch.embeddings;
+                    console.log(`Using embedding from most similar sequence (${bestScore.toFixed(4)} k-mer cosine similarity): ${bestMatch.id}`);
+                } else {
+                    // Fallback: create a weighted average embedding based on k-mer similarities
+                    const allValidEntries = window.currentEmbeddingDataForPlot.filter(entry => 
+                        (entry.dna_embeddings || entry.embeddings) && 
+                        (entry.sequence || entry.sequence_snippet)
+                    );
+                    
+                    if (allValidEntries.length > 0) {
+                        const similarities = allValidEntries.map(entry => {
+                            const dbSeq = (entry.sequence || entry.sequence_snippet).toUpperCase();
+                            const similarity = calculateSequenceCosineSimilarity(querySeq, dbSeq, kmerSize);
+                            return { entry, similarity };
+                        });
+                        
+                        // Sort by similarity and take top 5 for weighted average
+                        const topSimilar = similarities
+                            .sort((a, b) => b.similarity - a.similarity)
+                            .slice(0, 5)
+                            .filter(item => item.similarity > 0);
+                        
+                        if (topSimilar.length > 0) {
+                            const firstEmbedding = topSimilar[0].entry.dna_embeddings || topSimilar[0].entry.embeddings;
+                            const embeddingDim = firstEmbedding.length;
+                            queryEmbedding = Array(embeddingDim).fill(0);
+                            
+                            let totalWeight = 0;
+                            for (const { entry, similarity } of topSimilar) {
+                                const embedding = entry.dna_embeddings || entry.embeddings;
+                                if (embedding && embedding.length === embeddingDim) {
+                                    for (let i = 0; i < embeddingDim; i++) {
+                                        queryEmbedding[i] += embedding[i] * similarity;
+                                    }
+                                    totalWeight += similarity;
+                                }
+                            }
+                            
+                            if (totalWeight > 0) {
+                                for (let i = 0; i < embeddingDim; i++) {
+                                    queryEmbedding[i] /= totalWeight;
+                                }
+                                console.log(`Using weighted average embedding from top ${topSimilar.length} similar sequences`);
+                            }
+                        }
+                    }
                 }
+            }
+            
+            if (!queryEmbedding) {
+                console.error('Could not generate query embedding for classification');
+                classificationPayload.biotype = [];
+                classificationPayload.species = [];
+                classificationPayload.similar = [];
+            } else {
+                // Debug: log the query embedding and database info
+                console.log('Query embedding dimension:', queryEmbedding.length);
+                console.log('Database size:', window.currentEmbeddingDataForPlot.length);
+                
+                // Classify by similarity using the embedding database
+                const biotypeResults = classifyByEmbeddingSimilarity(queryEmbedding, window.currentEmbeddingDataForPlot, 'biotype', 10);
+                const speciesResults = classifyByEmbeddingSimilarity(queryEmbedding, window.currentEmbeddingDataForPlot, 'species', 10);
+                
+                console.log('Biotype classification results:', biotypeResults);
+                console.log('Species classification results:', speciesResults);
+                
+                classificationPayload.biotype = biotypeResults;
+                classificationPayload.species = speciesResults;
+                
+                // Find most similar sequences
+                classificationPayload.similar = findSimilarSequences(queryEmbedding, window.currentEmbeddingDataForPlot, 5);
+            }
 
-                displaySingleSequenceClassification(seqData, classificationPayload, resultsContainer);
+                    
+                } else {
+                    // Original zero-shot classification
+                    let firstTextTokenData = null;
+                    const classificationConfig = { ...currentConfig };
 
-                if (sequencesProcessed === 0) { 
-                    if(firstDnaTokenData) displayTokenizationPreview(firstDnaTokenData.type, firstDnaTokenData.input, firstDnaTokenData.tokens, firstDnaTokenData.ids, tokenizationPreviewContainer);
-                    if(firstTextTokenData) {
-                        const textTokenDiv = document.createElement('div'); textTokenDiv.className = 'mt-2'; 
+                    if (biotypeLabels.length > 0) {
+                        const r = await zeroShotClassifySingle(seqData.sequence, biotypeLabels, currentONNXSession, currentDnaTokenizer, currentTextTokenizer, classificationConfig);
+                        classificationPayload.biotype = r.results; 
+                        if (!firstDnaTokenData) firstDnaTokenData = r.dnaTokenData; 
+                        if (!firstTextTokenData && r.textTokenData.length > 0) firstTextTokenData = r.textTokenData[0];
+                    }
+                    if (speciesLabels.length > 0) {
+                        const r = await zeroShotClassifySingle(seqData.sequence, speciesLabels, currentONNXSession, currentDnaTokenizer, currentTextTokenizer, classificationConfig);
+                        classificationPayload.species = r.results; 
+                        if (!firstDnaTokenData) firstDnaTokenData = r.dnaTokenData; 
+                        if (!firstTextTokenData && r.textTokenData.length > 0) firstTextTokenData = r.textTokenData[0];
+                    }
+                    if (customPrompts.length > 0) {
+                        const r = await zeroShotClassifySingle(seqData.sequence, customPrompts, currentONNXSession, currentDnaTokenizer, currentTextTokenizer, classificationConfig);
+                        classificationPayload.custom = r.results; 
+                        if (!firstDnaTokenData) firstDnaTokenData = r.dnaTokenData; 
+                        if (!firstTextTokenData && r.textTokenData.length > 0) firstTextTokenData = r.textTokenData[0];
+                    }
+                    
+                    if (sequencesProcessed === 0 && firstTextTokenData) {
+                        const textTokenDiv = document.createElement('div'); 
+                        textTokenDiv.className = 'mt-2'; 
                         displayTokenizationPreview(firstTextTokenData.type, firstTextTokenData.input, firstTextTokenData.tokens, firstTextTokenData.ids, textTokenDiv);
                         tokenizationPreviewContainer.appendChild(textTokenDiv);
                     }
                 }
+
+                displaySingleSequenceClassification(seqData, classificationPayload, resultsContainer);
+
+                if (sequencesProcessed === 0 && firstDnaTokenData) { 
+                    displayTokenizationPreview(firstDnaTokenData.type, firstDnaTokenData.input, firstDnaTokenData.tokens, firstDnaTokenData.ids, tokenizationPreviewContainer);
+                }
+                
                 sequencesProcessed++;
                 updateClassificationProgress(sequencesProcessed, parsedSequences.length);
                 if(sequencesProcessed % 5 === 0 && parsedSequences.length > 10) await delay(10); 
@@ -341,8 +792,7 @@ async function processAndClassifyFasta() {
             }
         }
     } finally {
-        // hideSpinner(); // REMOVED
-        document.getElementById('process-fasta-btn').disabled = false; // Re-enable button
+        document.getElementById('process-fasta-btn').disabled = false;
     }
 
     updateTotalSequencesClassified(sequencesProcessed);
@@ -398,6 +848,12 @@ function handleClearAllData() {
     currentONNXSession = null;
     currentDnaTokenizer = new DNATokenizerClient(getConfigValue('kmerSize')); 
     currentTextTokenizer = new TextTokenizerClient();
+    onnxModelMetadata = {
+        dnaInputNames: null,
+        dnaOutputNames: null,
+        textInputNames: null,
+        textOutputNames: null
+    };
     
     showToast('All loaded data has been cleared.', 'success-ultra');
 }

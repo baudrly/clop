@@ -8,7 +8,7 @@
  */
 function expandCompactFASTASequence(sequenceString) {
     if (!sequenceString) return "";
-    return sequenceString.replace(/\{(\w)\*(\d+)\}/g, (match, base, count) => {
+    return sequenceString.replace(/\{(\w+)\*(\d+)\}/g, (match, base, count) => {
         return base.repeat(parseInt(count, 10));
     });
 }
@@ -17,24 +17,32 @@ function expandCompactFASTASequence(sequenceString) {
  * Calculates the cosine similarity between two vectors.
  * @param {number[]} vecA Array of numbers.
  * @param {number[]} vecB Array of numbers.
- * @returns {number} Cosine similarity, or 0 if input is invalid.
+ * @returns {number} Cosine similarity between -1 and 1, or 0 if input is invalid.
  */
 function cosineSimilarity(vecA, vecB) {
     if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) {
         return 0;
     }
+    
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
+    
     for (let i = 0; i < vecA.length; i++) {
-        dotProduct += (vecA[i] || 0) * (vecB[i] || 0); 
-        normA += (vecA[i] || 0) * (vecA[i] || 0);
-        normB += (vecB[i] || 0) * (vecB[i] || 0);
+        const a = vecA[i] || 0;
+        const b = vecB[i] || 0;
+        dotProduct += a * b;
+        normA += a * a;
+        normB += b * b;
     }
+    
     if (normA === 0 || normB === 0) return 0;
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    
+    const similarity = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    
+    // Ensure the result is within valid range [-1, 1]
+    return Math.max(-1, Math.min(1, similarity));
 }
-
 
 /**
  * Performs Principal Component Analysis (PCA) on a dataset.
@@ -65,11 +73,11 @@ function simplePca(data, nComponents = 2) {
     }
     const centeredData = data.map(sample => sample.map((val, j) => val - means[j]));
     
-    // For true PCA, you'd compute covariance and eigenvectors.
-    // Using scikit-js for a more robust PCA if available, otherwise fallback.
-    if (typeof sk === 'object' && sk.decomposition && sk.decomposition.PCA) {
+    // Try to use scikit-js PCA if available
+    let skLib = window.scikitjs || window.sk || window.scikitJs;
+    if (skLib && skLib.decomposition && skLib.decomposition.PCA) {
         try {
-            const pca = new sk.decomposition.PCA({ nComponents: nComponents });
+            const pca = new skLib.decomposition.PCA({ nComponents: nComponents });
             pca.fit(data); // data or centeredData
             return pca.transform(data);
         } catch (e) {
@@ -128,8 +136,8 @@ function calculateGcContent(sequence) {
         if (char === 'G' || char === 'C') {
             gcCount++;
             validBaseCount++;
-        } else if (char === 'A' || char === 'T' || char === 'N') { // Count N as valid for length but not for GC
-            if (char !== 'N') validBaseCount++;
+        } else if (char === 'A' || char === 'T') { 
+            validBaseCount++;
         }
     }
     return validBaseCount > 0 ? gcCount / validBaseCount : 0;
@@ -223,4 +231,64 @@ function ensureSequenceMetrics(embeddingData) {
             item.cpg_oe = calculateCpGObsExp(sequence);
         }
     });
+}
+
+/**
+ * Calculates cosine similarity between two vectors based on k-mer frequency.
+ * @param {string} seq1 First DNA sequence
+ * @param {string} seq2 Second DNA sequence
+ * @param {number} k K-mer size for comparison
+ * @returns {number} Cosine similarity between 0 and 1
+ */
+function calculateSequenceCosineSimilarity(seq1, seq2, k = 6) {
+    if (!seq1 || !seq2) return 0;
+    
+    // Generate k-mer frequency vectors for both sequences
+    const kmerFreq1 = getKmerFrequencies(seq1, k);
+    const kmerFreq2 = getKmerFrequencies(seq2, k);
+    
+    // Get all unique k-mers
+    const allKmers = new Set([...Object.keys(kmerFreq1), ...Object.keys(kmerFreq2)]);
+    
+    if (allKmers.size === 0) return 0;
+    
+    // Create vectors
+    const vector1 = [];
+    const vector2 = [];
+    
+    for (const kmer of allKmers) {
+        vector1.push(kmerFreq1[kmer] || 0);
+        vector2.push(kmerFreq2[kmer] || 0);
+    }
+    
+    return cosineSimilarity(vector1, vector2);
+}
+
+/**
+ * Generates k-mer frequency counts for a DNA sequence.
+ * @param {string} sequence DNA sequence
+ * @param {number} k K-mer size
+ * @returns {Object} Object with k-mer frequencies
+ */
+function getKmerFrequencies(sequence, k) {
+    const frequencies = {};
+    const upperSeq = sequence.toUpperCase();
+    
+    for (let i = 0; i <= upperSeq.length - k; i++) {
+        const kmer = upperSeq.substring(i, i + k);
+        // Only count valid DNA k-mers
+        if (/^[ACGTN]+$/.test(kmer)) {
+            frequencies[kmer] = (frequencies[kmer] || 0) + 1;
+        }
+    }
+    
+    // Normalize frequencies
+    const total = Object.values(frequencies).reduce((sum, count) => sum + count, 0);
+    if (total > 0) {
+        for (const kmer in frequencies) {
+            frequencies[kmer] /= total;
+        }
+    }
+    
+    return frequencies;
 }
