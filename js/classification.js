@@ -39,9 +39,10 @@ class DNATokenizerClient {
                 encodedIds = encodedIds.concat(Array(maxLength - encodedIds.length).fill(this.pad_token_id));
             }
         }
-        return { 
-            ids: encodedIds, 
-            attention_mask: encodedIds.map(id => id === this.pad_token_id ? 0 : 1), 
+        return {
+            ids: encodedIds,
+            // ATTENTION: The 'attention_mask' key is removed as it's not used by the model.
+            // The 'length' is the crucial value.
             length: Math.min(originalLength, maxLength || originalLength),
             original_tokens: tokens, // For preview
             original_input: original // For preview
@@ -83,9 +84,9 @@ class TextTokenizerClient {
                 encodedIds = encodedIds.concat(Array(maxLength - encodedIds.length).fill(this.pad_token_id));
             }
         }
-        return { 
-            ids: encodedIds, 
-            attention_mask: encodedIds.map(id => id === this.pad_token_id ? 0 : 1), 
+        return {
+            ids: encodedIds,
+            // ATTENTION: The 'attention_mask' key is removed.
             length: Math.min(originalLength, maxLength || originalLength),
             original_tokens: tokens, // For preview
             original_input: original // For preview
@@ -98,7 +99,7 @@ class TextTokenizerClient {
  * Performs zero-shot classification for a given DNA sequence against a list of text labels.
  * @param {string} dnaSequence The input DNA sequence.
  * @param {Array<string>} textLabels Array of text labels to classify against.
- * @param {ort.InferenceSession | null} onnxSession Pre-loaded ONNX session. Null for simulated mode.
+ * @param {ort.InferenceSession | null} onnxSessions Pre-loaded ONNX sessions. Null for simulated mode.
  * @param {DNATokenizerClient} dnaTokenizer Instance of DNA tokenizer.
  * @param {TextTokenizerClient} textTokenizer Instance of Text tokenizer.
  * @param {Object} config Configuration object with maxDnaLen, maxTextLen.
@@ -106,22 +107,23 @@ class TextTokenizerClient {
  *          Results, and tokenization data for the first DNA and all text labels.
  */
 
-async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaTokenizer, textTokenizer, config) {
+async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSessions, dnaTokenizer, textTokenizer, config) {
     if (!textLabels || textLabels.length === 0) {
         console.debug("No text labels provided for classification.");
         return { results: [], dnaTokenData: null, textTokenData: [] };
     }
 
-    // Get ONNX names from config - these should match what the Python script exports
-    const { 
-        maxDnaLen, maxTextLen,
-        onnxInputNameDnaIds = 'dna_tokens', 
-        onnxInputNameDnaMask = 'dna_lengths', 
-        onnxOutputNameDnaEmbedding = 'dna_embedding',
-        onnxInputNameTextIds = 'text_tokens', 
-        onnxInputNameTextMask = 'text_lengths', 
-        onnxOutputNameTextEmbedding = 'text_embedding'
-    } = config;
+    const { dna: dnaOnnxSession, text: textOnnxSession } = onnxSessions;
+    
+    const { maxDnaLen, maxTextLen } = config;
+
+    // These names MUST match the names used in the Python ONNX export script.
+    const onnxInputNameDnaIds = 'dna_tokens';
+    const onnxInputNameDnaMask = 'dna_lengths';
+    const onnxOutputNameDnaEmbedding = 'dna_embedding';
+    const onnxInputNameTextIds = 'text_tokens';
+    const onnxInputNameTextMask = 'text_lengths';
+    const onnxOutputNameTextEmbedding = 'text_embedding';
 
     let dnaEmbedding;
     const dnaEncoded = dnaTokenizer.encode(dnaSequence, maxDnaLen);
@@ -129,30 +131,27 @@ async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaT
         type: 'DNA',
         input: dnaEncoded.original_input,
         tokens: dnaEncoded.original_tokens,
-        ids: dnaEncoded.ids.slice(0, dnaEncoded.length) // Show effective IDs
+        ids: dnaEncoded.ids.slice(0, dnaEncoded.length)
     };
 
-    if (onnxSession) {
+    if (dnaOnnxSession) {
         try {
-            // For DNA: create tensors matching what the Python model expects
-            console.debug("DNA Encoded IDs:", dnaEncoded.ids);
             const dnaInputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(dnaEncoded.ids.map(BigInt)), [1, dnaEncoded.ids.length]);
-            // For lengths, the Python model expects a scalar tensor with the actual sequence length
             const dnaLengthsTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(dnaEncoded.length)]), [1]);
             
             const dnaFeeds = {};
             dnaFeeds[onnxInputNameDnaIds] = dnaInputIdsTensor;
-            dnaFeeds[onnxInputNameDnaMask] = dnaLengthsTensor; // This is actually lengths, not mask
+            dnaFeeds[onnxInputNameDnaMask] = dnaLengthsTensor;
             
             console.debug("DNA Feeds for ONNX:", dnaFeeds);
-            const dnaResults = await onnxSession.run(dnaFeeds);
+            const dnaResults = await dnaOnnxSession.run(dnaFeeds);
             console.debug("DNA Embedding Results:", dnaResults);
             dnaEmbedding = Array.from(dnaResults[onnxOutputNameDnaEmbedding].data);
 
         } catch (e) {
             console.error("ONNX DNA encoding error:", e);
             showToast(`ONNX DNA Error: ${e.message.substring(0,100)}...`, 'danger-ultra', 7000);
-            dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 128); // Use larger embedding dim
+            dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 128);
         }
     } else {
         dnaEmbedding = simulateEmbedding(dnaSequence, 'dna', dnaTokenizer.k, 128);
@@ -171,18 +170,17 @@ async function zeroShotClassifySingle(dnaSequence, textLabels, onnxSession, dnaT
             ids: textEncoded.ids.slice(0, textEncoded.length)
         });
 
-        if (onnxSession) {
+        if (textOnnxSession) {
             try {
-                console.debug(`Text Encoded IDs for label "${label}":`, textEncoded.ids);
                 const textInputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(textEncoded.ids.map(BigInt)), [1, textEncoded.ids.length]);
                 const textLengthsTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(textEncoded.length)]), [1]);
                 
                 const textFeeds = {};
                 textFeeds[onnxInputNameTextIds] = textInputIdsTensor;
-                textFeeds[onnxInputNameTextMask] = textLengthsTensor; // This is actually lengths, not mask
+                textFeeds[onnxInputNameTextMask] = textLengthsTensor;
 
                 console.debug(`Text Feeds for ONNX for label "${label}":`, textFeeds);
-                const textResults = await onnxSession.run(textFeeds);
+                const textResults = await textOnnxSession.run(textFeeds);
                 console.debug(`Text Embedding Results for label "${label}":`, textResults);
                 textEmbedding = Array.from(textResults[onnxOutputNameTextEmbedding].data);
             } catch (e) {

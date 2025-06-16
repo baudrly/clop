@@ -11,12 +11,6 @@ const DEFAULT_CONFIG = {
     defaultBiotypes: "gene, protein_coding, lncRNA, enhancer, promoter, tRNA, rRNA, repeat, pseudogene",
     defaultSpecies: "Homo sapiens, Mus musculus, Danio rerio, Drosophila melanogaster, Saccharomyces cerevisiae, Arabidopsis thaliana",
     classificationTopN: 5, // Number of top results to show
-    onnxInputNameDnaIds: "dna_tokens",
-    onnxInputNameDnaMask: "dna_lengths",
-    onnxOutputNameDnaEmbedding: "dna_embedding",
-    onnxInputNameTextIds: "text_tokens",
-    onnxInputNameTextMask: "text_lengths",
-    onnxOutputNameTextEmbedding: "text_embedding",
 
     // Embedding Plot
     plotMarkerSize: 8,
@@ -24,13 +18,13 @@ const DEFAULT_CONFIG = {
     plotDefaultColorBy: "biotype",
     plotDefaultReduction: "pca",
     plotShowLegend: true,
-    plotColorScheme: "Plotly" // e.g., "Plotly", "D3", "Category10" - placeholder, actual palette chosen in viz
+    plotColorScheme: "Plotly"
 };
 
 let currentConfig = { ...DEFAULT_CONFIG };
 
 function loadConfig() {
-    const savedConfig = localStorage.getItem('bioClipExplorerProConfig'); // Changed key for new version
+    const savedConfig = localStorage.getItem('bioClipExplorerProConfig');
     if (savedConfig) {
         try {
             const parsedConfig = JSON.parse(savedConfig);
@@ -42,7 +36,7 @@ function loadConfig() {
     } else {
         currentConfig = { ...DEFAULT_CONFIG };
     }
-    applyConfigToUI(); // Apply loaded/default config to all relevant UI elements
+    applyConfigToUI();
     return currentConfig;
 }
 
@@ -73,20 +67,12 @@ function applyConfigToUI() {
     document.getElementById('setting-default-species').value = currentConfig.defaultSpecies;
     document.getElementById('setting-classification-top-n').value = currentConfig.classificationTopN;
 
-    document.getElementById('setting-onnx-dna-ids').value = currentConfig.onnxInputNameDnaIds;
-    document.getElementById('setting-onnx-dna-mask').value = currentConfig.onnxInputNameDnaMask;
-    document.getElementById('setting-onnx-dna-emb').value = currentConfig.onnxOutputNameDnaEmbedding;
-    document.getElementById('setting-onnx-text-ids').value = currentConfig.onnxInputNameTextIds;
-    document.getElementById('setting-onnx-text-mask').value = currentConfig.onnxInputNameTextMask;
-    document.getElementById('setting-onnx-text-emb').value = currentConfig.onnxOutputNameTextEmbedding;
-
     document.getElementById('setting-plot-marker-size').value = currentConfig.plotMarkerSize;
     document.getElementById('setting-plot-marker-opacity').value = currentConfig.plotMarkerOpacity;
     document.getElementById('setting-plot-show-legend').checked = currentConfig.plotShowLegend;
 
 
     // Main UI elements that should reflect config (e.g., on page load)
-    // Kmer size input in the classification section
     const kmerSizeInputMain = document.getElementById('kmer-size-input');
     if (kmerSizeInputMain) kmerSizeInputMain.value = currentConfig.kmerSize;
 
@@ -96,7 +82,6 @@ function applyConfigToUI() {
     const speciesLabelsInputMain = document.getElementById('species-labels-input');
     if(speciesLabelsInputMain) speciesLabelsInputMain.value = currentConfig.defaultSpecies;
 
-    // Embedding plot defaults (these influence dropdowns if they exist)
     const colorBySelectMain = document.getElementById('color-by-select');
     if (colorBySelectMain) colorBySelectMain.value = currentConfig.plotDefaultColorBy;
     const plotTypeSelectMain = document.getElementById('embedding-plot-type');
@@ -105,14 +90,13 @@ function applyConfigToUI() {
 
 function resetToDefaults() {
     if (confirm("Are you sure you want to reset all settings to their default values?")) {
-        currentConfig = { ...DEFAULT_CONFIG }; // Deep copy defaults
-        saveConfig({}); // Save the reset state (effectively overwriting with defaults)
+        currentConfig = { ...DEFAULT_CONFIG };
+        saveConfig({});
         applyConfigToUI();
         showToast('Settings have been reset to defaults.', 'info');
     }
 }
 
-// Helper to get a specific config value, ensuring it's valid or default
 function getConfigValue(key) {
     return currentConfig[key] !== undefined ? currentConfig[key] : DEFAULT_CONFIG[key];
 }
