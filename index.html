@@ -149,9 +149,15 @@
                                     </div>
                                     <hr class="hr-ultra">
                                     <h6 class="controls-header">Model & Vocabularies <small class="text-muted-ultra">(Optional)</small></h6>
-                                    <div class="mb-2">
-                                        <label for="onnx-model-input" class="form-label form-label-ultra small">ONNX Model</label>
-                                        <input class="form-control form-control-sm form-control-ultra" type="file" id="onnx-model-input" accept=".onnx">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label for="dna-model-input" class="form-label">DNA Encoder Model (.onnx)</label>
+                                            <input class="form-control form-control-sm" type="file" id="dna-model-input" accept=".onnx">
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label for="text-model-input" class="form-label">Text Encoder Model (.onnx)</label>
+                                            <input class="form-control form-control-sm" type="file" id="text-model-input" accept=".onnx">
+                                        </div>
                                     </div>
                                     <div class="row gx-2">
                                         <div class="col mb-2">
@@ -228,7 +234,6 @@
                         <div class="nav nav-tabs nav-tabs-ultra mb-3" id="settings-tab" role="tablist">
                             <button class="nav-link active" id="nav-general-settings-tab" data-bs-toggle="tab" data-bs-target="#nav-general-settings" type="button" role="tab">General</button>
                             <button class="nav-link" id="nav-classification-settings-tab" data-bs-toggle="tab" data-bs-target="#nav-classification-settings" type="button" role="tab">Classification</button>
-                            <button class="nav-link" id="nav-onnx-settings-tab" data-bs-toggle="tab" data-bs-target="#nav-onnx-settings" type="button" role="tab">ONNX Model</button>
                             <button class="nav-link" id="nav-plot-settings-tab" data-bs-toggle="tab" data-bs-target="#nav-plot-settings" type="button" role="tab">Plotting</button>
                         </div>
                     </nav>
@@ -253,18 +258,6 @@
                             <div class="mb-3"><label for="setting-default-biotypes" class="form-label form-label-ultra">Default Biotype Labels</label><textarea id="setting-default-biotypes" class="form-control form-control-sm form-control-ultra" rows="2"></textarea></div>
                             <div class="mb-3"><label for="setting-default-species" class="form-label form-label-ultra">Default Species Labels</label><textarea id="setting-default-species" class="form-control form-control-sm form-control-ultra" rows="2"></textarea></div>
                             <div class="mb-3"><label for="setting-classification-top-n" class="form-label form-label-ultra">Results to Display</label><input type="number" id="setting-classification-top-n" class="form-control form-control-sm form-control-ultra" value="5" min="1" max="10"></div>
-                        </div>
-                        <div class="tab-pane fade" id="nav-onnx-settings" role="tabpanel">
-                             <h6>ONNX Model Input/Output Names</h6>
-                             <p class="small text-muted-ultra">These names must match your exported ONNX model graph.</p>
-                             <div class="row">
-                                <div class="col-md-6 mb-2"><label for="setting-onnx-dna-ids" class="form-label form-label-ultra small">DNA Input IDs</label><input type="text" id="setting-onnx-dna-ids" class="form-control form-control-sm form-control-ultra"></div>
-                                <div class="col-md-6 mb-2"><label for="setting-onnx-dna-mask" class="form-label form-label-ultra small">DNA Mask</label><input type="text" id="setting-onnx-dna-mask" class="form-control form-control-sm form-control-ultra"></div>
-                                <div class="col-md-6 mb-2"><label for="setting-onnx-dna-emb" class="form-label form-label-ultra small">DNA Embedding Out</label><input type="text" id="setting-onnx-dna-emb" class="form-control form-control-sm form-control-ultra"></div>
-                                <div class="col-md-6 mb-2"><label for="setting-onnx-text-ids" class="form-label form-label-ultra small">Text Input IDs</label><input type="text" id="setting-onnx-text-ids" class="form-control form-control-sm form-control-ultra"></div>
-                                <div class="col-md-6 mb-2"><label for="setting-onnx-text-mask" class="form-label form-label-ultra small">Text Mask</label><input type="text" id="setting-onnx-text-mask" class="form-control form-control-sm form-control-ultra"></div>
-                                <div class="col-md-6 mb-2"><label for="setting-onnx-text-emb" class="form-label form-label-ultra small">Text Embedding Out</label><input type="text" id="setting-onnx-text-emb" class="form-control form-control-sm form-control-ultra"></div>
-                             </div>
                         </div>
                         <div class="tab-pane fade" id="nav-plot-settings" role="tabpanel">
                             <h6>Embedding Plot Defaults</h6>
@@ -291,8 +284,8 @@
     </div>
 
     <footer class="footer-ultra text-center p-3 mt-auto"> 
-        <p class="small mb-0 text-muted-ultra">CLOP Sequence Explorer
-            <a href="https://github.com" target="_blank" class="ms-2 text-decoration-none link-ultra" title="Project Repository"><i class="fab fa-github"></i> View on GitHub</a>
+        <p class="small mb-0 text-muted-ultra">CLOP - Contrasting Omics from Language Pre-training
+            <a href="https://github.com/baudrly/clop" target="_blank" class="ms-2 text-decoration-none link-ultra" title="Project Repository"><i class="fab fa-github"></i> View on GitHub</a>
         </p>
     </footer>
     
@@ -323,14 +316,6 @@
             // Now the functions should be available directly on the module
             window.parquetWasmModule = parquetWasm;
             console.log("parquet-wasm loaded and initialized");
-            
-            // Make scikit-js available globally (it's already loaded via script tag)
-            if (typeof window.scikitjs !== 'undefined') {
-                window.sk = window.scikitjs;
-                console.log("scikit-js already loaded via script tag");
-            } else {
-                console.warn("scikit-js not found on window");
-            }
         } catch (err) {
             console.error("Error loading modules:", err);
             window.parquetWasmModule = null; 
