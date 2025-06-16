@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
-import argparse
 import os
 import sys
+
+# Fix CUDA environment variables BEFORE importing torch
+# This must happen before any CUDA initialization
+
+# Option 1: Set CUDA_VISIBLE_DEVICES if not already set
+if 'CUDA_VISIBLE_DEVICES' not in os.environ:
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Use first GPU
+
+# Option 2: Force CUDA device order
+os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+
+# Option 3: Disable CUDA memory fraction (helps with some initialization issues)
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
+
+import argparse
 import gzip
 import re
 import json
@@ -19,6 +33,43 @@ import subprocess # For TensorFlow.js conversion
 import unittest.mock # For TFJS export test mocking
 import time # For timing sections
 import urllib.parse # For GFF attribute parsing
+
+def diagnose_cuda():
+    """Diagnose CUDA availability and configuration."""
+    print("=" * 60)
+    print("CUDA Diagnostics:")
+    print("=" * 60)
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    
+    if hasattr(torch.version, 'cuda'):
+        print(f"CUDA version (PyTorch built with): {torch.version.cuda}")
+    
+    if torch.cuda.is_available():
+        print(f"CUDA device count: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            print(f"  Device {i}: {torch.cuda.get_device_name(i)}")
+            print(f"    Compute Capability: {torch.cuda.get_device_capability(i)}")
+            print(f"    Memory: {torch.cuda.get_device_properties(i).total_memory / 1024**3:.2f} GB")
+    else:
+        print("CUDA not available. Checking why...")
+        
+        # Check if CUDA runtime is accessible
+        try:
+            import subprocess
+            result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("\nnvidia-smi output (first 10 lines):")
+                print('\n'.join(result.stdout.split('\n')[:10]))
+            else:
+                print("nvidia-smi command failed - NVIDIA drivers may not be installed")
+        except FileNotFoundError:
+            print("nvidia-smi not found - NVIDIA drivers may not be installed")
+        except Exception as e:
+            print(f"Error running nvidia-smi: {e}")
+            
+    print("=" * 60)
+    print()
 
 import torch
 import torch.nn as nn
@@ -64,7 +115,6 @@ except ImportError:
     onnx = None
     onnxruntime = None
 
-# Optional TF related imports for TF.js export
 try:
     import tensorflow # For type hinting and conditional logic
 except ImportError:
@@ -106,11 +156,12 @@ DEFAULT_LEARNING_RATE = 1e-3
 DEFAULT_EPOCHS = 10
 DEFAULT_TEMPERATURE = 0.07
 ONNX_OPSET_VERSION = 12
-DEFAULT_GFF_FEATURE_TYPES = ['gene', 'pseudogene', 'ncRNA_gene', 'lnc_RNA', 'miRNA', 'mRNA', 'transcript', 'rRNA', 'snoRNA', 'snRNA', 'tRNA', 'antisense_RNA']
+DEFAULT_GFF_FEATURE_TYPES = ['gene', 'pseudogene', 'ncRNA_gene', 'lnc_RNA', 'miRNA', 'mRNA', 'transcript', 'rRNA', 
+'snoRNA', 'snRNA', 'tRNA', 'antisense_RNA', 'siRNA', 'exon', 'intron', 'promoter', 'enhancer', 'transposon']
 
 # Blacklist of biotypes to exclude (instead of whitelist)
 EXCLUDED_BIOTYPES = frozenset({
-    "unknown_biotype", "unknown", "N/A", "random_dna", 
+    "unknown_biotype", "unknown", "N/A", "random_dna", "biological_region",
     "unknown_biotype_fasta_header", "unknown_species_fasta_header",
     "unknown_biotype_bed_ref", "unknown_bed_feature", "unknown_gff_species"
 })
@@ -483,6 +534,57 @@ class LSTMEncoder(nn.Module):
         hidden_bwd = hidden[-1,:,:]
         hidden_combined = torch.cat((hidden_fwd, hidden_bwd), dim=1)
         projected = self.fc(hidden_combined) 
+        return F.normalize(projected, p=2, dim=1)
+
+class LSTMEncoderONNX(nn.Module):
+    """
+    ONNX-export-friendly version of LSTMEncoder.
+    This version avoids using pack_padded_sequence, which is not well-supported
+    for ONNX export. It manually selects the last valid hidden state from the
+    full output sequence of the LSTM.
+    """
+    def __init__(self, original_encoder: LSTMEncoder):
+        super().__init__()
+        # Copy all layers and attributes from the original encoder
+        self.embedding = original_encoder.embedding
+        self.lstm = original_encoder.lstm
+        self.fc = original_encoder.fc
+        self.dropout_layer = original_encoder.dropout_layer
+        # The LSTM must have batch_first=True for this logic to work
+        if not self.lstm.batch_first:
+            raise ValueError("LSTMEncoderONNX requires the LSTM to have batch_first=True.")
+
+    def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
+        # Move lengths tensor to the same device as the input tensor x
+        lengths_device = lengths.to(x.device)
+
+        embedded = self.dropout_layer(self.embedding(x))
+        
+        # The LSTM processes the full padded sequence.
+        # The 'outputs' tensor will have the shape: (batch_size, seq_len, hidden_dim * 2)
+        outputs, _ = self.lstm(embedded)
+
+        batch_size = x.size(0)
+        
+        # Create a tensor of indices for the last valid token in each sequence.
+        # lengths are 1-based, so subtract 1 for 0-based indexing.
+        last_seq_idxs = (lengths_device - 1).clamp(min=0)
+
+        # For the forward direction of a bidirectional LSTM, the last relevant output
+        # is at the index corresponding to the sequence's actual length.
+        # We gather these using advanced indexing.
+        # Shape of hidden_fwd will be (batch_size, hidden_dim)
+        hidden_fwd = outputs[torch.arange(batch_size, device=x.device), last_seq_idxs, :self.lstm.hidden_size]
+        
+        # For the backward direction, the "last" state (which is the result of
+        # processing the *first* token) is always at index 0 of the sequence.
+        # Shape of hidden_bwd will be (batch_size, hidden_dim)
+        hidden_bwd = outputs[:, 0, self.lstm.hidden_size:]
+        
+        # Concatenate the forward and backward final states
+        hidden_combined = torch.cat((hidden_fwd, hidden_bwd), dim=1)
+        
+        projected = self.fc(hidden_combined)
         return F.normalize(projected, p=2, dim=1)
 
 
@@ -1718,7 +1820,7 @@ def generate_report(args: argparse.Namespace, metrics_history: Dict, report_dir:
 
 
     # --- Markdown Report ---
-    md_report_content = f"# DNA-Clip Model Training Report\n\n"
+    md_report_content = f"# CLOP Model Training Report\n\n"
     md_report_content += f"Report Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     input_file_display = os.path.basename(args.input_file) if args.input_file else "N/A (e.g., resumed without new input)"
     md_report_content += f"Input Data File: `{input_file_display}` (Type: `{args.input_type}`)\n"
@@ -1850,7 +1952,7 @@ def generate_report(args: argparse.Namespace, metrics_history: Dict, report_dir:
     if not PIL:
         logger.warning("PIL/Pillow library not found. Skipping PDF report generation.")
     else:
-        pdf_report_title = f"DNA-Clip Report: {os.path.basename(args.input_file)}" if args.input_file else "DNA-Clip Report (Resumed)"
+        pdf_report_title = f"CLOP Report: {os.path.basename(args.input_file)}" if args.input_file else "CLOP Report (Resumed)"
         pdf = PDFReport(title=pdf_report_title)
         pdf.alias_nb_pages() # Enable page numbering {nb}
 
@@ -2011,6 +2113,213 @@ def export_onnx_to_tfjs(onnx_model_filepath: str, tfjs_output_dir: str):
                 logger.error(f"Failed to clean up temporary directory {temp_saved_model_dir}: {e_cleanup}")
         logger.info(f"TensorFlow.js export process finished in {time.time() - export_tfjs_start_time:.2f}s.")
 
+def export_encoders_to_onnx(model: DNAClipModel, dna_tokenizer: BaseTokenizer, text_tokenizer: TextTokenizer,
+                            output_dir: str, args_from_run: argparse.Namespace):
+    """
+    Exports the DNA and Text encoders of a given model to ONNX format.
+
+    Args:
+        model (DNAClipModel): The model with encoders to export.
+        dna_tokenizer (BaseTokenizer): The DNA tokenizer used for the model.
+        text_tokenizer (TextTokenizer): The text tokenizer used for the model.
+        output_dir (str): The directory to save the ONNX and config files.
+        args_from_run (argparse.Namespace): The arguments from the original training run,
+                                            needed for model configuration.
+
+    Returns:
+        Dict[str, str]: A dictionary containing the paths to the exported ONNX files.
+    """
+    if not onnx:
+        logger.warning("ONNX library not installed. Skipping ONNX export.")
+        return {}
+
+    logger.info("Exporting model encoders to ONNX format...")
+    onnx_export_start_time = time.time()
+    os.makedirs(output_dir, exist_ok=True)
+
+    device = next(model.parameters()).device
+    model.eval() # Ensure model is in eval mode
+
+    # Use dummy input shapes based on max_len settings from the run's arguments
+    export_dummy_dna_len = args_from_run.max_dna_len if args_from_run.max_dna_len > 0 else 128
+    export_dummy_text_len = args_from_run.max_text_len if args_from_run.max_text_len > 0 else 64
+
+    # The 'lengths' tensor must be on the CPU for the original torch.onnx.export call
+    dummy_dna_tokens_export = torch.randint(0, dna_tokenizer.get_vocab_size(), (1, export_dummy_dna_len), dtype=torch.long).to(device)
+    dummy_dna_lengths_export = torch.tensor([export_dummy_dna_len // 2], dtype=torch.long).cpu()
+    dummy_text_tokens_export = torch.randint(0, text_tokenizer.get_vocab_size(), (1, export_dummy_text_len), dtype=torch.long).to(device)
+    dummy_text_lengths_export = torch.tensor([export_dummy_text_len // 2], dtype=torch.long).cpu()
+
+    onnx_export_paths = {}
+
+    # --- START OF CHANGE: Wrap LSTM encoders for ONNX export ---
+
+    # Prepare DNA encoder for export
+    dna_encoder_for_export = model.dna_encoder
+    if isinstance(model.dna_encoder, LSTMEncoder):
+        logger.info("Wrapping DNA LSTM encoder in ONNX-friendly container for export.")
+        dna_encoder_for_export = LSTMEncoderONNX(model.dna_encoder)
+
+    dna_encoder_onnx_path = os.path.join(output_dir, "dna_encoder.onnx")
+    try:
+        torch.onnx.export(dna_encoder_for_export,
+                          (dummy_dna_tokens_export, dummy_dna_lengths_export.to(device)), # Pass lengths on same device
+                          dna_encoder_onnx_path,
+                          input_names=['dna_tokens', 'dna_lengths'],
+                          output_names=['dna_embedding'],
+                          dynamic_axes={'dna_tokens': {0: 'batch_size', 1: 'sequence_length'},
+                                        'dna_lengths': {0: 'batch_size'},
+                                        'dna_embedding': {0: 'batch_size'}},
+                          opset_version=ONNX_OPSET_VERSION, export_params=True, do_constant_folding=True)
+        logger.info(f"DNA encoder exported to ONNX: {dna_encoder_onnx_path}")
+        onnx_export_paths["dna_encoder"] = dna_encoder_onnx_path
+    except Exception as e_onnx_dna:
+        logger.error(f"Failed to export DNA encoder to ONNX: {e_onnx_dna}", exc_info=True)
+
+    # Prepare Text encoder for export
+    text_encoder_for_export = model.text_encoder
+    if isinstance(model.text_encoder, LSTMEncoder):
+        logger.info("Wrapping Text LSTM encoder in ONNX-friendly container for export.")
+        text_encoder_for_export = LSTMEncoderONNX(model.text_encoder)
+
+    text_encoder_onnx_path = os.path.join(output_dir, "text_encoder.onnx")
+    try:
+        torch.onnx.export(text_encoder_for_export,
+                          (dummy_text_tokens_export, dummy_text_lengths_export.to(device)), # Pass lengths on same device
+                          text_encoder_onnx_path,
+                          input_names=['text_tokens', 'text_lengths'],
+                          output_names=['text_embedding'],
+                          dynamic_axes={'text_tokens': {0: 'batch_size', 1: 'sequence_length'},
+                                        'text_lengths': {0: 'batch_size'},
+                                        'text_embedding': {0: 'batch_size'}},
+                          opset_version=ONNX_OPSET_VERSION, export_params=True, do_constant_folding=True)
+        logger.info(f"Text encoder exported to ONNX: {text_encoder_onnx_path}")
+        onnx_export_paths["text_encoder"] = text_encoder_onnx_path
+    except Exception as e_onnx_text:
+        logger.error(f"Failed to export text encoder to ONNX: {e_onnx_text}", exc_info=True)
+    
+    # --- END OF CHANGE ---
+
+    # Also save a config file with necessary metadata for web applications
+    web_config = {
+        "embedding_dim": args_from_run.embedding_dim,
+        "max_dna_len": args_from_run.max_dna_len,
+        "max_text_len": args_from_run.max_text_len,
+        "dna_tokenizer_type": args_from_run.dna_tokenizer_type,
+        "k": getattr(dna_tokenizer, 'k', None)  # Safely get k-mer size if applicable
+    }
+    web_config_path = os.path.join(output_dir, "model_web_config.json")
+    with open(web_config_path, 'w') as f:
+        json.dump(web_config, f, indent=2)
+    logger.info(f"Model configuration for web app saved to {web_config_path}")
+
+    logger.info(f"ONNX export finished in {time.time() - onnx_export_start_time:.2f}s.")
+    return onnx_export_paths
+
+
+def convert_checkpoint_to_onnx(checkpoint_path: str, output_dir: str,
+                               load_dna_tok_path: Optional[str] = None,
+                               load_text_tok_path: Optional[str] = None):
+    """
+    Loads a model from a checkpoint and exports its encoders to ONNX format.
+    This function is a standalone utility mode for the script.
+    """
+    logger.info(f"Converting checkpoint '{checkpoint_path}' to ONNX format.")
+    os.makedirs(output_dir, exist_ok=True)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    except Exception as e:
+        logger.critical(f"Failed to load checkpoint file: {e}", exc_info=True)
+        return
+
+    chkp_args_dict = checkpoint.get('args')
+    if not chkp_args_dict:
+        logger.critical("Checkpoint does not contain 'args'. Cannot determine model architecture.")
+        return
+    chkp_args = argparse.Namespace(**chkp_args_dict)
+
+    encoder_type_from_chkp = getattr(chkp_args, 'encoder_type', 'lstm')
+    logger.info(f"Checkpoint was trained with encoder type: '{encoder_type_from_chkp}'")
+
+    # Load tokenizers
+    checkpoint_dir = os.path.dirname(checkpoint_path)
+    dna_tok_path = load_dna_tok_path or os.path.join(checkpoint_dir, "dna_tokenizer_vocab.json")
+    text_tok_path = load_text_tok_path or os.path.join(checkpoint_dir, "text_tokenizer_vocab.json")
+
+    if not os.path.exists(dna_tok_path) or not os.path.exists(text_tok_path):
+        logger.critical(f"Tokenizer vocab files not found. Expected at '{dna_tok_path}' and '{text_tok_path}'.")
+        return
+
+    dna_tokenizer_cls = KmerDNATokenizer if chkp_args.dna_tokenizer_type == "kmer" else CharDNATokenizer
+    dna_tokenizer = dna_tokenizer_cls.load_vocab(dna_tok_path)
+    text_tokenizer = TextTokenizer.load_vocab(text_tok_path)
+    logger.info("Tokenizers loaded successfully.")
+
+    # Initialize model with args from checkpoint
+    model = DNAClipModel(
+        dna_vocab_size=dna_tokenizer.get_vocab_size(),
+        text_vocab_size=text_tokenizer.get_vocab_size(),
+        embedding_dim=chkp_args.embedding_dim,
+        hidden_dim=chkp_args.hidden_dim,
+        num_layers=chkp_args.num_layers,
+        dropout=chkp_args.dropout,
+        initial_temperature=chkp_args.initial_temperature,
+        dna_pad_idx=dna_tokenizer.pad_token_id,
+        text_pad_idx=text_tokenizer.pad_token_id,
+        encoder_type=encoder_type_from_chkp,
+    ).to(device)
+
+    state_dict = checkpoint['model_state_dict']
+    if any(key.startswith('_orig_mod.') for key in state_dict.keys()):
+        logger.info("Checkpoint appears to be from a torch.compile'd model. Cleaning state_dict keys.")
+        state_dict = {
+            key.replace('_orig_mod.', ''): value
+            for key, value in state_dict.items()
+        }
+    
+    model.load_state_dict(state_dict, strict=False)
+    model.eval()
+    logger.info("Model initialized and weights loaded from checkpoint.")
+
+    export_encoders_to_onnx(
+        model=model,
+        dna_tokenizer=dna_tokenizer,
+        text_tokenizer=text_tokenizer,
+        output_dir=output_dir,
+        args_from_run=chkp_args
+    )
+    logger.info(f"ONNX conversion complete. Files are in '{output_dir}'.")
+
+
+def convert_csv_to_parquet(csv_filepath: str):
+    """
+    Converts a given embeddings CSV file to a Parquet file.
+    The output Parquet file is saved in the same directory with the same base name.
+    """
+    if pl is None:
+        logger.critical("The 'polars' library is required for this conversion. Please install it (`pip install polars`) and try again.")
+        return
+
+    if not csv_filepath.lower().endswith(".csv"):
+        logger.warning(f"Input file '{csv_filepath}' does not have a .csv extension. Proceeding anyway.")
+
+    output_parquet_path = os.path.splitext(csv_filepath)[0] + ".parquet"
+    logger.info(f"Converting '{csv_filepath}' to Parquet format...")
+    logger.info(f"Output will be saved to '{output_parquet_path}'")
+
+    try:
+        start_time = time.time()
+        df = pl.read_csv(csv_filepath)
+        df.write_parquet(output_parquet_path)
+        duration = time.time() - start_time
+        logger.info(f"Successfully converted file in {duration:.2f} seconds.")
+    except Exception as e:
+        logger.critical(f"An error occurred during conversion: {e}", exc_info=True)
+
 # --- Main Script Execution ---
 def main():
     main_start_time = time.time()
@@ -2040,8 +2349,8 @@ def main():
     train_group.add_argument("--epochs",type=int,default=DEFAULT_EPOCHS,help="Number of training epochs.")
     train_group.add_argument("--batch_size",type=int,default=DEFAULT_BATCH_SIZE,help="Batch size for training and evaluation.")
     train_group.add_argument("--learning_rate",type=float,default=DEFAULT_LEARNING_RATE,help="Initial learning rate.")
-    train_group.add_argument("--max_dna_len",type=int,default=512,help="Maximum length for DNA sequences (tokens). 0 for dynamic (padded per batch).")
-    train_group.add_argument("--max_text_len",type=int,default=128,help="Maximum length for text annotations (tokens). 0 for dynamic.")
+    train_group.add_argument("--max_dna_len",type=int,default=4096,help="Maximum length for DNA sequences (tokens). 0 for dynamic (padded per batch).")
+    train_group.add_argument("--max_text_len",type=int,default=256,help="Maximum length for text annotations (tokens). 0 for dynamic.")
     train_group.add_argument("--validation_split",type=float,default=0.1,help="Fraction of data for validation (0 to disable).")
     train_group.add_argument("--min_token_freq",type=int,default=1,help="Minimum frequency for tokens in vocabulary building.")
     train_group.add_argument("--optimizer_type",type=str,default="AdamW",choices=["AdamW","Adam","SGD"],help="Optimizer type.")
@@ -2056,17 +2365,47 @@ def main():
     export_group.add_argument("--export_onnx",action="store_true",help="Export encoders to ONNX format after training.")
     export_group.add_argument("--export_tfjs", action="store_true", help="Export ONNX encoders to TensorFlow.js format after training (requires ONNX export).")
     export_group.add_argument("--export_embeddings_format",type=str,choices=["csv","parquet","both","none"],default="both",help="Format for exporting final embeddings.")
+    export_group.add_argument("--convert_checkpoint_to_onnx", type=str, help="Path to a model checkpoint (.pth) to convert to ONNX format. Skips training.")
+    export_group.add_argument("--convert_csv_to_parquet", type=str, help="Path to an embeddings CSV file to convert to Parquet format. Skips training.")
+    export_group.add_argument("--encoder_type",type=str,choices=['lstm','transformer'],default="lstm",help="Model encoder architecture to use for conversion or training.")
     
     misc_group = parser.add_argument_group('Miscellaneous')
     misc_group.add_argument("--seed",type=int,default=42,help="Random seed for reproducibility.")
     misc_group.add_argument("--num_workers",type=int,default=0,help="Number of DataLoader workers. 0 for main process.")
     misc_group.add_argument("--run_dummy_example",action="store_true",help="Run with a small, internally generated dummy dataset for testing.")
     misc_group.add_argument("--test_suite",action="store_true",help="Run built-in unit tests and exit.")
-    misc_group.add_argument("--plot_methods",nargs='+',default=["pca","tsne"],choices=["pca","tsne","umap"],help="Methods for embedding visualization.")
+    misc_group.add_argument("--plot_methods",nargs='+',default=["pca","tsne", "umap"],choices=["pca","tsne","umap"],help="Methods for embedding visualization.")
     misc_group.add_argument("--log_level",type=str,default="INFO",choices=["DEBUG","INFO","WARNING","ERROR","CRITICAL"],help="Logging level.")
-    
+    misc_group.add_argument("--gpu_id", type=int, default=None, help="Specific GPU ID to use (e.g., 0, 1). None for automatic selection.")
+    misc_group.add_argument("--force_cpu", action="store_true", help="Force CPU usage even if GPU is available.")
+    misc_group.add_argument("--diagnose_cuda", action="store_true", help="Run CUDA diagnostics and exit.")
+
     args = parser.parse_args()
     logger.setLevel(getattr(logging, args.log_level.upper()))
+
+    if args.convert_csv_to_parquet:
+        if not os.path.exists(args.convert_csv_to_parquet):
+            logger.critical(f"Input CSV file not found: {args.convert_csv_to_parquet}")
+            sys.exit(1)
+        convert_csv_to_parquet(args.convert_csv_to_parquet)
+        sys.exit(0)
+
+    if args.convert_checkpoint_to_onnx:
+        if not os.path.exists(args.convert_checkpoint_to_onnx):
+            logger.critical(f"Checkpoint file not found: {args.convert_checkpoint_to_onnx}")
+            sys.exit(1)
+        convert_checkpoint_to_onnx(
+            checkpoint_path=args.convert_checkpoint_to_onnx,
+            output_dir=args.output_dir,
+            load_dna_tok_path=args.load_dna_tokenizer_path,
+            load_text_tok_path=args.load_text_tokenizer_path
+        )
+        sys.exit(0)
+
+    # Run CUDA diagnostics if requested
+    if args.diagnose_cuda:
+        diagnose_cuda()
+        sys.exit(0)
 
     if args.test_suite:
         logger.info("Running unit test suite...")
@@ -2102,6 +2441,63 @@ def main():
 
     elif not args.input_file and not args.resume_from_checkpoint:
         parser.error("Either --input_file or --resume_from_checkpoint must be provided for a non-dummy run.")
+
+    # Enhanced device selection with better error handling
+    if args.force_cpu:
+        device = torch.device("cpu")
+        logger.info("Forced CPU usage via --force_cpu flag")
+    else:
+        # Try to initialize CUDA with better error handling
+        if args.gpu_id is not None:
+            # Use specific GPU
+            if torch.cuda.is_available():
+                try:
+                    torch.cuda.set_device(args.gpu_id)
+                    device = torch.device(f"cuda:{args.gpu_id}")
+                    # Test that we can actually allocate memory on this device
+                    test_tensor = torch.zeros(1).to(device)
+                    del test_tensor
+                    logger.info(f"Successfully initialized CUDA device {args.gpu_id}: {torch.cuda.get_device_name(args.gpu_id)}")
+                except Exception as e:
+                    logger.warning(f"Failed to use GPU {args.gpu_id}: {e}. Falling back to CPU.")
+                    device = torch.device("cpu")
+            else:
+                logger.warning("CUDA not available. Using CPU.")
+                device = torch.device("cpu")
+        else:
+            # Automatic device selection
+            if torch.cuda.is_available():
+                try:
+                    device = torch.device("cuda")
+                    # Test that we can actually use CUDA
+                    test_tensor = torch.zeros(1).to(device)
+                    del test_tensor
+                    logger.info(f"Successfully initialized CUDA device: {torch.cuda.get_device_name()}")
+                except Exception as e:
+                    logger.warning(f"CUDA is available but initialization failed: {e}. Using CPU.")
+                    device = torch.device("cpu")
+            else:
+                device = torch.device("cpu")
+                logger.info("CUDA not available. Using CPU.")
+    
+    # Clear any CUDA cache from initialization tests
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    
+    # Log final device configuration
+    logger.info(f"Using device: {device}")
+    if device.type == "cuda":
+        logger.info(f"GPU Memory: {torch.cuda.get_device_properties(device).total_memory / 1024**3:.2f} GB")
+        logger.info(f"GPU Name: {torch.cuda.get_device_name(device)}")
+    
+    # Update AMP setup to work with the selected device
+    if args.use_amp and device.type != 'cuda':
+        logger.warning("AMP (Automatic Mixed Precision) requires CUDA. Disabling AMP.")
+        args.use_amp = False
+    
+    if device.type == 'cuda' and args.use_amp:
+        torch.backends.cudnn.benchmark = True
+        logger.info("CUDA available. AMP enabled. CuDNN benchmark mode set to True.")
 
     # Create output directories
     try:
@@ -2352,7 +2748,8 @@ def main():
         dropout=args.dropout, 
         initial_temperature=args.initial_temperature,
         dna_pad_idx=dna_tokenizer.pad_token_id,
-        text_pad_idx=text_tokenizer.pad_token_id
+        text_pad_idx=text_tokenizer.pad_token_id,
+        encoder_type=args.encoder_type
     ).to(device)
     logger.info(f"Model initialized in {time.time() - model_init_start_time:.2f}s.")
 
@@ -2392,8 +2789,16 @@ def main():
     if args.resume_from_checkpoint and os.path.exists(args.resume_from_checkpoint):
         logger.info(f"Resuming training from checkpoint: {args.resume_from_checkpoint}")
         try:
-            checkpoint = torch.load(args.resume_from_checkpoint, map_location=device)
-            model.load_state_dict(checkpoint['model_state_dict'])
+            checkpoint = torch.load(args.resume_from_checkpoint, map_location=device, weights_only=False)
+            state_dict = checkpoint['model_state_dict']
+            if any(key.startswith('_orig_mod.') for key in state_dict.keys()):
+                logger.info("Resuming from a torch.compile'd model. Cleaning state_dict keys.")
+                state_dict = {
+                    key.replace('_orig_mod.', ''): value
+                    for key, value in state_dict.items()
+                }
+            model.load_state_dict(state_dict)
+
             if 'optimizer_state_dict' in checkpoint: optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             
             start_epoch = checkpoint.get('epoch', -1) + 1 # Resume from next epoch
@@ -2428,12 +2833,12 @@ def main():
     elif args.load_model_path: # Load only model weights, not full training state
         logger.info(f"Loading model weights from: {args.load_model_path}")
         try:
-            model.load_state_dict(torch.load(args.load_model_path, map_location=device), strict=True)
+            model.load_state_dict(torch.load(args.load_model_path, map_location=device, weights_only=False), strict=True)
             logger.info("Model weights loaded successfully (strict=True).")
         except RuntimeError as e_strict_load: # If strict loading fails (e.g. different architecture)
             logger.warning(f"Strict loading of model weights failed: {e_strict_load}. Attempting non-strict loading (strict=False)...")
             try:
-                model.load_state_dict(torch.load(args.load_model_path, map_location=device), strict=False)
+                model.load_state_dict(torch.load(args.load_model_path, map_location=device, weights_only=False), strict=False)
                 logger.info("Model weights loaded successfully (strict=False). Some layers might be unmatched or differently sized.")
             except Exception as e_non_strict_load:
                 logger.error(f"Non-strict loading of model weights also failed: {e_non_strict_load}. Model will use fresh random weights.", exc_info=True)
@@ -2564,8 +2969,15 @@ def main():
     if final_model_to_use_path and os.path.exists(final_model_to_use_path):
         logger.info(f"Loading model from {final_model_to_use_path} for final evaluation and export ({descriptor_for_final_eval}).")
         try:
-            final_checkpoint = torch.load(final_model_to_use_path, map_location=device)
-            model.load_state_dict(final_checkpoint['model_state_dict'])
+            final_checkpoint = torch.load(final_model_to_use_path, map_location=device, weights_only=False)
+            state_dict = final_checkpoint['model_state_dict']
+            if any(key.startswith('_orig_mod.') for key in state_dict.keys()):
+                logger.info("Resuming from a torch.compile'd model. Cleaning state_dict keys.")
+                state_dict = {
+                    key.replace('_orig_mod.', ''): value
+                    for key, value in state_dict.items()
+                }
+            model.load_state_dict(state_dict)
             # If dataset_summary wasn't populated (e.g. resume without input_file), try to get it from checkpoint
             if not dataset_summary and 'dataset_summary' in final_checkpoint : 
                 dataset_summary = final_checkpoint['dataset_summary']
@@ -2673,7 +3085,7 @@ def main():
                                   dna_encoder_onnx_path, 
                                   input_names=['dna_tokens', 'dna_lengths'], 
                                   output_names=['dna_embedding'], 
-                                  dynamic_axes={'dna_tokens': {0: 'batch_size', 1: 'dna_sequence_length'}, 
+                                  dynamic_axes={'dna_tokens': {0: 'batch_size', 1: 'sequence_length'}, 
                                                 'dna_lengths': {0: 'batch_size'}, 
                                                 'dna_embedding': {0: 'batch_size'}}, 
                                   opset_version=ONNX_OPSET_VERSION, export_params=True, do_constant_folding=True)
@@ -2689,7 +3101,7 @@ def main():
                                   text_encoder_onnx_path, 
                                   input_names=['text_tokens', 'text_lengths'], 
                                   output_names=['text_embedding'], 
-                                  dynamic_axes={'text_tokens': {0: 'batch_size', 1: 'text_sequence_length'}, 
+                                  dynamic_axes={'text_tokens': {0: 'batch_size', 1: 'sequence_length'}, 
                                                 'text_lengths': {0: 'batch_size'}, 
                                                 'text_embedding': {0: 'batch_size'}}, 
                                   opset_version=ONNX_OPSET_VERSION, export_params=True, do_constant_folding=True)
@@ -2697,6 +3109,19 @@ def main():
                 onnx_export_paths["text_encoder"] = text_encoder_onnx_path
             except Exception as e_onnx_text:
                 logger.error(f"Failed to export text encoder to ONNX: {e_onnx_text}", exc_info=True)
+                
+            # Also save vocab files with embedding dimension info for the web app
+            web_config = {
+                "embedding_dim": args.embedding_dim,
+                "max_dna_len": args.max_dna_len,
+                "max_text_len": args.max_text_len,
+                "dna_tokenizer_type": args.dna_tokenizer_type,
+                "k": dna_tokenizer.k if hasattr(dna_tokenizer, 'k') else None
+            }
+            with open(os.path.join(args.output_dir, "model_web_config.json"), 'w') as f:
+                json.dump(web_config, f, indent=2)
+            logger.info("Model configuration for web app saved to model_web_config.json")
+            
             logger.info(f"ONNX export finished in {time.time() - onnx_export_start_time:.2f}s.")
 
     if args.export_tfjs:
@@ -2719,7 +3144,7 @@ def main():
     # Ensure dataset_summary is available for the report
     if not dataset_summary and args.resume_from_checkpoint and os.path.exists(args.resume_from_checkpoint):
         # Try to load from the specific checkpoint used for resuming if dataset_summary is still empty
-        chkpt_for_ds_summary = torch.load(args.resume_from_checkpoint, map_location='cpu')
+        chkpt_for_ds_summary = torch.load(args.resume_from_checkpoint, map_location='cpu', weights_only=False)
         if 'dataset_summary' in chkpt_for_ds_summary:
             dataset_summary = chkpt_for_ds_summary['dataset_summary']
         else: # Fallback if not in checkpoint
