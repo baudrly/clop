@@ -15,6 +15,7 @@ in [
   {
     packages = with pkgs; [
       cudaPackages.cuda_nvcc
+      just
     ];
 
     env = {
