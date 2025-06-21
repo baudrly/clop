@@ -16,6 +16,7 @@ in [
     packages = with pkgs; [
       cudaPackages.cuda_nvcc
       just
+      zsh
     ];
 
     env = {
@@ -26,16 +27,19 @@ in [
 
     languages.python = {
       enable = true;
+      package = pkgs.python311;
       venv.enable = true;
       uv = {
         enable = true;
-        sync.enable = true;
+        sync = {
+          enable = true;
+          allExtras = true;
+        };
       };
     };
 
     enterShell = ''
       nvcc -V
-      uv sync
     '';
   }
 ]
