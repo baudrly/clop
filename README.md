@@ -48,6 +48,7 @@ python and uv.
 
 > [!NOTE]
 > You will need the nix package manager on your system.
+> ([installation](https://determinate.systems/posts/determinate-nix-installer/)),
 
 1. Clone this repository:
    ```bash
@@ -62,11 +63,10 @@ python and uv.
    ```
 
 > [!TIP]
-> if `just` just is installed
-> ([installation](https://determinate.systems/posts/determinate-nix-installer/)),
-> you can run `just dev` instead and list available recipes by running `just`.
-> If you have direnv on your system, run `direnv allow` once, then you will
-> enter the environment whenever you `cd` into the directory.
+> if [`just`](https://github.com/casey/just) is installed, you can run
+> `just dev` instead and list available recipes by running `just`. If you have
+> direnv on your system, run `direnv allow` once, then you will enter the
+> environment whenever you `cd` into the directory.
 
 ### Python-only installation
 
