@@ -41,12 +41,6 @@ A live demo (embedding visualization, classification) is available
 
 ## Installation
 
-> [!TIP]
-> If `just` is available on your system (it is included in the nix flake, to
-> install it manually see
-> [here](https://github.com/casey/just?tab=readme-ov-file#installation)), you
-> can run commands through just recipes. Run `just` to see what's available.
-
 ### Complete installation (recommended)
 
 A nix flake is provided to install everything for the project, including CUDA,
@@ -54,7 +48,6 @@ python and uv.
 
 > [!NOTE]
 > You will need the nix package manager on your system.
-> ([installation](https://determinate.systems/posts/determinate-nix-installer/))
 
 1. Clone this repository:
    ```bash
@@ -69,9 +62,11 @@ python and uv.
    ```
 
 > [!TIP]
-> if `just` just is installed, you can do `just dev` instead. If you have direnv
-> on your system, run `direnv allow` once, then you will enter the environment
-> whenever you `cd` into the directory.
+> if `just` just is installed
+> ([installation](https://determinate.systems/posts/determinate-nix-installer/)),
+> you can run `just dev` instead and list available recipes by running `just`.
+> If you have direnv on your system, run `direnv allow` once, then you will
+> enter the environment whenever you `cd` into the directory.
 
 ### Python-only installation
 
