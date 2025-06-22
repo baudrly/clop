@@ -1,0 +1,59 @@
+[project]
+name = "clop"
+description = "Contrastive Language Omics Pre-training"
+authors = [
+  { name = "baudrly" },
+  { name = "cmdoret" },
+]
+license = { text = "MIT" }
+license-files = ["LICEN[CS]E*"]
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dynamic = ["version"]
+dependencies = [
+  "fpdf2",
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "pygments",
+  "scikit-learn",
+  "seaborn",
+  "torch",
+]
+
+[project.optional-dependencies]
+webapp = ["tensorflow", "tensorflowjs"]
+onnx = ["onnx", "onnxruntime", "onnx-tf"]
+
+[dependency-groups]
+dev = [
+  "ruff",
+  "pre-commit",
+  "pytest",
+]
+
+[project.scripts]
+modos = "clop.clop:main"
+
+[project.urls]
+Homepage = "https://github.com/baudrly/clop"
+
+[tool.ruff]
+# Allow lambda functions
+lint.ignore = ["E731"]
+line-length = 79
+
+[tool.pytest.ini_options]
+addopts = ["--doctest-modules"]
+testpaths = ["clop", "tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/clop/__init__.py"
+pattern = '__version__ = "(?P<version>[^"]+)"'
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clop"]

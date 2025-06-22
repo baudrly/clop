@@ -1,12 +1,18 @@
 # CLOP: Contrastive Learning for Omics Pre-training
 
-CLOP is a PyTorch implementation of a CLIP-like model for learning joint embeddings of DNA sequences and their textual annotations. The model can be trained on FASTA, BED, or GFF3 files to learn meaningful representations that enable cross-modal retrieval and classification. It focuses on species and biotype as primary annotations and optional futher descriptions.
+CLOP is a PyTorch implementation of a CLIP-like model for learning joint
+embeddings of DNA sequences and their textual annotations. The model can be
+trained on FASTA, BED, or GFF3 files to learn meaningful representations that
+enable cross-modal retrieval and classification. It focuses on species and
+biotype as primary annotations and optional futher descriptions.
 
-A live demo (embedding visualization, classification) is available [here](https://baudrly.github.io/clop).
+A live demo (embedding visualization, classification) is available
+[here](https://baudrly.github.io/clop).
 
 ## Features
 
-- **Dual-Encoder Architecture**: Separate encoders for DNA sequences and text annotations
+- **Dual-Encoder Architecture**: Separate encoders for DNA sequences and text
+  annotations
 - **Multiple Input Formats**:
   - FASTA (with metadata in headers)
   - BED (with reference FASTA)
@@ -35,31 +41,53 @@ A live demo (embedding visualization, classification) is available [here](https:
 
 ## Installation
 
+### Complete installation (recommended)
+
+A nix flake is provided to install everything for the project, including CUDA,
+python and uv.
+
+> [!NOTE]
+> You will need the nix package manager on your system.
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/yourusername/clop.git
+   cd clop
+   ```
+2. Enter the development environmnent using nix:
+
+   ```bash
+   nix develop --no-pure-eval --accept-flake-config \
+            "./tools/nix#default" --command $0
+   ```
+
+> [!TIP]
+> if `just` just is installed
+> ([installation](https://determinate.systems/posts/determinate-nix-installer/)),
+> you can run `just dev` instead and list available recipes by running `just`.
+> If you have direnv on your system, run `direnv allow` once, then you will
+> enter the environment whenever you `cd` into the directory.
+
+### Python-only installation
+
+The project can be installed with a python dependency manager like uv, but you
+will need to setup CUDA yourself.
+
 1. Clone this repository:
    ```bash
    git clone https://github.com/yourusername/clop.git
    cd clop
    ```
 
-2. Install requirements:
+2. Install dependencies defined in pyproject using your favourite python package
+   manager. The following extra dependency groups are available:
+
+- onnx: enables ONNX support
+- webapp: includes tensorflowjs
+
   ```bash
-  pip install torch numpy pandas scikit-learn matplotlib seaborn pygments fpdf2
-  ```
-
-Also, optionally:
-  
-  ```bash
-  # For GFF3 parsing and advanced visualization
-  pip install pyfaidx umap-learn
-
-  # For Parquet export
-  pip install polars
-
-  # For ONNX export
-  pip install onnx onnxruntime onnx-tf
-
-  # For TensorFlow.js export
-  pip install tensorflow tensorflowjs
+  # with uv
+  uv sync --all-extras
   ```
 
 ## Basic usage
@@ -103,12 +131,17 @@ python clop.py --run_dummy_example
 ## Input file formats
 
 ### FASTA
-It's recommended that fasta files follow this convention (Species/Biotype/Description):
+
+It's recommended that fasta files follow this convention
+(Species/Biotype/Description):
+
 ```
 >sequence_id|species=Human|biotype=protein_coding|description=Example gene
 ATGCGTACGTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT
 ```
-The script is designed to be compatible with [chromosample](https://github.com/baudrly/chromosample).
+
+The script is designed to be compatible with
+[chromosample](https://github.com/baudrly/chromosample).
 
 ### BED Format
 
@@ -116,7 +149,8 @@ Standard BED format (6+ columns) with reference FASTA.
 
 ### GFF3 Format
 
-Standard GFF3 format with reference FASTA. Use `--gff_feature_types` to specify which feature types to process.
+Standard GFF3 format with reference FASTA. Use `--gff_feature_types` to specify
+which feature types to process.
 
 ## Output structure
 
