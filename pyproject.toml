@@ -33,7 +33,7 @@ dev = [
 ]
 
 [project.scripts]
-modos = "clop.clop:main"
+clop = "clop.clop:main"
 
 [project.urls]
 Homepage = "https://github.com/baudrly/clop"
