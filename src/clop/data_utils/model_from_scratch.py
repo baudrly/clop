@@ -25,9 +25,9 @@ def annotation_to_tensor(annotation, tokenizer):
 
 
 # Enhanced Sequence Encoder
-class DNASEquenceEncoder(nn.Module):
+class DNASequenceEncoder(nn.Module):
     def __init__(self, embedding_dim):
-        super(DNASEquenceEncoder, self).__init__()
+        super(DNASequenceEncoder, self).__init__()
         self.embedding = nn.Embedding(
             5, embedding_dim
         )  # 4 nucleotides + 1 for padding
@@ -80,7 +80,7 @@ class AnnotationEncoder(nn.Module):
 class DNA_CLIP(nn.Module):
     def __init__(self, embedding_dim=128):
         super(DNA_CLIP, self).__init__()
-        self.sequence_encoder = DNASEquenceEncoder(embedding_dim)
+        self.sequence_encoder = DNASequenceEncoder(embedding_dim)
         self.annotation_encoder = AnnotationEncoder(embedding_dim)
 
     def forward(self, sequence, annotation, seq_lengths, attention_mask):

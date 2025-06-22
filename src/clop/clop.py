@@ -645,12 +645,13 @@ class TransformerEncoder(nn.Module):
     def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         # Create padding mask
         batch_size, seq_len = x.shape
+        lengths = lengths.to(x.device)
         mask = torch.arange(seq_len, device=x.device).expand(
             batch_size, seq_len
         ) >= lengths.unsqueeze(1)
 
         # Embedding and positional encoding
-        x = self.embedding(x) * math.sqrt(self.embedding.size(-1))
+        x = self.embedding(x) * math.sqrt(self.embedding.embedding_dim)
         x = x.transpose(0, 1)  # (batch, seq, embed) -> (seq, batch, embed)
         x = self.pos_encoder(x)
         x = self.dropout(x)
@@ -662,8 +663,7 @@ class TransformerEncoder(nn.Module):
         # Global average pooling over sequence dimension (excluding padding)
         # Create a mask for non-padded positions
         lengths_expanded = lengths.unsqueeze(1).unsqueeze(2).float()
-        x_sum = x.sum(dim=1)
-        x_mean = x_sum / lengths_expanded.clamp(min=1)
+        x_mean = (x * ~mask.unsqueeze(-1)).sum(dim=1) / lengths.unsqueeze(-1).clamp(min=1)
 
         # Project and normalize
         x_mean = self.fc(x_mean)
@@ -2483,9 +2483,11 @@ def plot_metric_trends(metrics_history: Dict, report_dir: str):
             plt.ylabel(y_axis_label)
             num_legend_cols_trend = max(
                 1,
-                len(actual_metrics_in_group) // 2
-                if len(actual_metrics_in_group) > 2
-                else 1,
+                (
+                    len(actual_metrics_in_group) // 2
+                    if len(actual_metrics_in_group) > 2
+                    else 1
+                ),
             )
             plt.legend(loc="best", ncol=num_legend_cols_trend)
             plt.grid(True)
@@ -2600,11 +2602,13 @@ def plot_sequence_length_distributions(dataset_summary: Dict, report_dir: str):
                 50,
                 max(
                     10,
-                    num_unique_vals // 2
-                    if num_unique_vals > 20
-                    else num_unique_vals
-                    if num_unique_vals > 0
-                    else 10,
+                    (
+                        num_unique_vals // 2
+                        if num_unique_vals > 20
+                        else num_unique_vals
+                        if num_unique_vals > 0
+                        else 10
+                    ),
                 ),
             )
 
@@ -4759,9 +4763,11 @@ def main():
             "training_samples": len(train_seqs),
             "validation_samples": len(val_seqs) if val_indices else 0,
             "dna_tokenizer_type": args.dna_tokenizer_type,
-            "kmer_k_effective": dna_tokenizer.k
-            if isinstance(dna_tokenizer, KmerDNATokenizer)
-            else "N/A",
+            "kmer_k_effective": (
+                dna_tokenizer.k
+                if isinstance(dna_tokenizer, KmerDNATokenizer)
+                else "N/A"
+            ),
             "dna_vocab_size": dna_tokenizer.get_vocab_size(),
             "text_vocab_size": text_tokenizer.get_vocab_size(),
             "max_dna_len_config": args.max_dna_len,
@@ -5128,12 +5134,12 @@ def main():
                             "epoch": epoch,
                             "model_state_dict": model.state_dict(),
                             "optimizer_state_dict": optimizer.state_dict(),
-                            "scheduler_state_dict": scheduler.state_dict()
-                            if scheduler
-                            else None,
-                            "scaler_state_dict": scaler.state_dict()
-                            if scaler
-                            else None,
+                            "scheduler_state_dict": (
+                                scheduler.state_dict() if scheduler else None
+                            ),
+                            "scaler_state_dict": (
+                                scaler.state_dict() if scaler else None
+                            ),
                             "best_val_loss": best_val_loss,
                             "args": vars(args),
                             "metrics_history": dict(
@@ -5226,9 +5232,9 @@ def main():
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "scheduler_state_dict": scheduler.state_dict()
-                    if scheduler
-                    else None,
+                    "scheduler_state_dict": (
+                        scheduler.state_dict() if scheduler else None
+                    ),
                     "scaler_state_dict": scaler.state_dict()
                     if scaler
                     else None,
@@ -5337,7 +5343,11 @@ def main():
         final_dna_embeddings,
         final_text_embeddings,
         final_similarity_matrix_output,
-    ) = None, None, None
+    ) = (
+        None,
+        None,
+        None,
+    )
 
     if not final_evaluation_dl:
         logger.warning(
@@ -5991,13 +6001,13 @@ chrTestNonExistent\tTEST\tgene\t1\t5\t.\t+\t.\tID=gene2;Name=BadChromGene
         hidden_dim = 24
         num_layers = 1
         pad_idx = 0
-        encoder = SequenceEncoder(
+        encoder = TransformerEncoder(
             vocab_size, embed_dim, hidden_dim, num_layers, pad_idx=pad_idx
         ).to(self.device)
 
         tokens = torch.tensor(
-            [[1, 2, 3, 4, 5], [6, 7, 8, pad_idx, pad_idx]], dtype=torch.long
-        ).to(self.device)
+            [[1, 2, 3, 4, 5], [6, 7, 8, pad_idx, pad_idx]], dtype=torch.long, device=self.device
+        )
         lengths = torch.tensor(
             [5, 3], dtype=torch.long
         )  # Lengths must be on CPU for pack_padded_sequence
@@ -6008,8 +6018,8 @@ chrTestNonExistent\tTEST\tgene\t1\t5\t.\t+\t.\tID=gene2;Name=BadChromGene
 
         # Test with all padding (except one token to avoid empty sequence issues with pack_padded)
         tokens_all_pad = torch.tensor(
-            [[1, pad_idx, pad_idx], [6, pad_idx, pad_idx]], dtype=torch.long
-        ).to(self.device)
+            [[1, pad_idx, pad_idx], [6, pad_idx, pad_idx]], dtype=torch.long, device=self.device
+        )
         lengths_all_pad = torch.tensor(
             [1, 1], dtype=torch.long
         )  # Effective length 1 for each
@@ -6120,6 +6130,7 @@ chrTestNonExistent\tTEST\tgene\t1\t5\t.\t+\t.\tID=gene2;Name=BadChromGene
 
     def test_parse_fasta(self):
         parsed = parse_fasta(self.test_fasta_path)
+        print(parsed, file=sys.stderr)
         self.assertEqual(len(parsed), 2)
         self.assertEqual(parsed[0][0], "s1")  # ID
         self.assertEqual(parsed[0][1], "AAAAACCC")  # Sequence
