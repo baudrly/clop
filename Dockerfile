@@ -1,5 +1,7 @@
 FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 
+LABEL org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}"
+
 # Install additional dependencies
 RUN pip install --upgrade pip && \
     pip install numpy pandas scikit-learn matplotlib seaborn fpdf \
@@ -9,7 +11,7 @@ RUN pip install --upgrade pip && \
 WORKDIR /workspace
 
 # Copy your script
-COPY clop.py .
+COPY src/clop.py .
 
 # Run with GPU support:
 # docker build -t clop-cuda .
