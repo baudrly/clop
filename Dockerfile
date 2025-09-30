@@ -1,18 +1,42 @@
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+# syntax=docker/dockerfile:1.7-labs
 
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 LABEL org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}"
 
-# Install additional dependencies
-RUN pip install --upgrade pip && \
-    pip install numpy pandas scikit-learn matplotlib seaborn fpdf \
-                onnx onnxruntime polars
+ARG DEBIAN_FRONTEND=noninteractive
 
-# Set working directory
-WORKDIR /workspace
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy your script
-COPY src/clop.py .
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Run with GPU support:
-# docker build -t clop-cuda .
-# docker run --gpus all -v $(pwd):/workspace clop-cuda python clop.py --input_file sampled_dataset3.fa
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade --no-cache-dir pip \
+ && python -m pip install --no-cache-dir \
+      numpy \
+      pandas \
+      scikit-learn \
+      matplotlib \
+      seaborn \
+      fpdf2 \
+      onnx \
+      onnxruntime \
+      polars
+
+WORKDIR /app
+
+# so we can run `-m clop.clop`
+ENV PYTHONPATH=/app/src
+
+COPY src/ /app/src/
+
+RUN useradd -m -u 10001 appuser \
+ && chown -R appuser:appuser /app
+USER appuser
+
+# docker run ... -- <args>
+ENTRYPOINT ["python", "-m", "clop.clop"]
+CMD ["--help"]
