@@ -1,4 +1,7 @@
+import os
+
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 
 
@@ -72,13 +75,16 @@ def preprocess_inputs(path, path_save):
     sequences = df[input_column]
     labels = df[label_column]
 
-    labels = sequences[~sequences.str.contains("U|O")]
-    sequences = sequences[~sequences.str.contains("U|O")]
-    dna_sequences = sequences.apply(protein_to_dna)
+    mask = ~sequences.str.contains("U|O", na=False)
+    filtered_labels = labels[mask]
+    filtered_sequences = sequences[mask]
+    dna_sequences = filtered_sequences.apply(protein_to_dna)
 
-    labels.save(path_save + "labels.csv")
-    dna_sequences.save(path_save + "sequences.csv")
-    print("saved processed sequences and labels (annotations")
+    labels_path = os.path.join(path_save, "labels.csv")
+    sequences_path = os.path.join(path_save, "sequences.csv")
+    filtered_labels.to_csv(labels_path, index=False)
+    dna_sequences.to_csv(sequences_path, index=False)
+    print("saved processed sequences and labels (annotations)")
 
 
 if __name__ == "__main__":
