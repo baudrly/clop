@@ -28,24 +28,6 @@ folder on any web server, or send `site/clop-reader.html`, the same reader as a 
 * **Map**: colour by species, biotype, call correctness, confidence or your prompts. Each group's prompt is labelled
   where it points, and clicking a legend entry isolates that group.
 
-## What's new in v2
-
-CLOP v2 is a rewrite of the 2025 proof of concept, organised around what made the first version hard to trust and
-slow to use.
-
-| | v1 (2025) | v2 |
-|---|---|---|
-| Code | one 6,300-line script | a package: `io`, `text`, `models`, `losses`, `data`, `train`, `evaluate`, `baselines`, `viz`, `report`, `export`, `cli` |
-| Header parsing | documented `key=value` headers were read as positional fields | `key=value`, chromosample (`species\|biotype\|description`) and plain headers |
-| Inputs | FASTA, BED, GFF3 | + GTF and GenBank (no Biopython needed); `clop prepare` turns annotations into fixed windows |
-| Leakage | random splits; whole features, so length gave the label away | whole-chromosome splits, duplicate-aware random splits, fixed-length windows |
-| Loss and retrieval metric | CLIP loss; per-row retrieval, meaningless when thousands of sequences share a caption | multi-positive InfoNCE over distinct captions (default; equivalent to CLIP up to a frequency prior), sigmoid, CLIP; label-level retrieval |
-| DNA encoder | k-mer BiLSTM | strand-invariant dilated CNN (default), k-mer Transformer, k-mer BiLSTM, chaos-game (FCGR) CNN |
-| Evaluation | k-NN accuracy, MRR | zero-shot and k-NN calls of species, biotype within species, and species × biotype; text→DNA retrieval; modality gap; bootstrap intervals; k-mer baselines |
-| Outputs | Markdown/PDF report (broken fonts) | self-contained interactive HTML report with a WebGL 3D atlas, publication figures, JSON metrics |
-| Deployment | ONNX (LSTM only), TF.js via onnx-tf | ONNX for every encoder (verified against PyTorch), and a dependency-free JavaScript reader |
-| Training | no resume | resumable runs, early stopping on validation zero-shot F1, AMP, `torch.compile` |
-
 ## Install
 
 ```bash
@@ -161,39 +143,4 @@ Ablations at 300 windows per cell: moment pooling beats mean+max pooling (cell F
 strands lifts cell F1 from 0.316 to 0.339; the CLIP loss and the multi-positive loss give the same model (0.342 vs
 0.339); the v1 BiLSTM reaches 0.303 with 4× the parameters. On three genomes never seen in training, species-agnostic
 prompts (`clop classify --pooled biotype`) name biotypes better than 4-mers in *B. fragilis* (65.2% vs 57.0%) and the
-*A. thaliana* chloroplast (41.9% vs 34.8%). Details in
-[`paper/paper.pdf`](paper/paper.pdf) and the [poster](paper/poster.pdf).
-
-## Reproducing the paper
-
-```bash
-python scripts/build_atlas.py manifest.tsv data/atlas6.fa.gz       # six-genome window atlas
-bash scripts/build_transfer.sh data/sources data/transfer          # kiwifruit, B. fragilis, A. thaliana chloroplast
-python scripts/benchmark.py --atlas data/atlas6.fa.gz --transfer data/transfer --sources data/sources --out results
-python scripts/make_figures.py results paper/figures && python scripts/make_numbers.py results paper/numbers.tex
-python scripts/speed.py results
-cd paper && latexmk -xelatex paper.tex poster.tex
-```
-
-The benchmark is resumable (finished arms are skipped) and runs on a laptop CPU in a few hours. A trained model
-(`models/clop-atlas6.pt`, 1 MB) and an 8,000-window atlas sample ship with the repository; `just web` builds the reader.
-
-## Migrating from v1
-
-`python -m clop.clop --input_file x.fa ...` became `clop train -i x.fa ...`. Old flags are still accepted and mapped
-(`--input_file`, `--output_dir`, `--reference_fasta`, `--batch_size`, `--learning_rate`, `--encoder_type`, …) with a
-deprecation warning; `--run_dummy_example` runs `clop demo` and `--test_suite` runs the tests. v1 checkpoints are not
-loadable (the architecture changed); retrain with `clop train`. The FCGR + CLIP hackathon code is kept in
-`examples/legacy/`.
-
-## Citation
-
-```bibtex
-@inproceedings{baudry2026clop,
-  title  = {{CLOP} 2: leakage-controlled contrastive pre-training of {DNA} and annotation text},
-  author = {Baudry, Lyam and Matthey-Doret, Cyril and Fritz, Amelie and Raimondi, Celia},
-  year   = {2026}
-}
-```
-
-MIT licence.
+*A. thaliana* chloroplast (41.9% vs 34.8%).

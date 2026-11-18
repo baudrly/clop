@@ -11,9 +11,22 @@ default:
 develop:
   just nix::develop default
 
-# Format python code
+# Format and lint python code
 format *args:
-  ruff format {{args}} src/
+  ruff format {{args}} src/ tests/ scripts/
+  ruff check --fix src/ tests/ scripts/
+
+# Run the test suite
+test *args:
+  pytest {{args}}
+
+# Train the synthetic demo and build its report
+demo:
+  clop demo -o clop_demo
+
+# Build the web reader from the shipped model
+web:
+  clop export -m models/clop-atlas6.pt -o _site --web --atlas models/atlas-sample.fa.gz && echo "open _site/index.html (or share _site/clop-reader.html)"
 
 alias dev := develop
-alias fmt := format 
+alias fmt := format

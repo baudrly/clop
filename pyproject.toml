@@ -1,51 +1,58 @@
 [project]
 name = "clop"
-description = "Contrastive Language Omics Pre-training"
+description = "Contrastive Language-Omics Pre-training: joint embeddings of DNA sequences and their annotations"
 authors = [
-  { name = "baudrly" },
-  { name = "cmdoret" },
+  { name = "Lyam Baudry" },
+  { name = "Cyril Matthey-Doret" },
+  { name = "Amelie Fritz" },
+  { name = "Celia Raimondi" },
 ]
 license = { text = "MIT" }
 license-files = ["LICEN[CS]E*"]
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.10"
 dynamic = ["version"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
-  "fpdf2",
-  "matplotlib",
-  "numpy",
-  "pandas",
-  "pygments",
-  "scikit-learn",
-  "seaborn",
-  "torch",
+  "matplotlib>=3.7",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "scikit-learn>=1.3",
+  "scipy>=1.10",
+  "torch>=2.1",
 ]
 
 [project.optional-dependencies]
-webapp = ["tensorflow", "tensorflowjs"]
-onnx = ["onnx", "onnxruntime", "onnx-tf"]
+umap = ["umap-learn>=0.5"]
+onnx = ["onnx>=1.15", "onnxruntime>=1.17"]
+parquet = ["pyarrow>=14"]
+all = ["umap-learn>=0.5", "onnx>=1.15", "onnxruntime>=1.17", "pyarrow>=14"]
 
 [dependency-groups]
-dev = [
-  "ruff",
-  "pre-commit",
-  "pytest",
-]
+dev = ["ruff", "pre-commit", "pytest", "pytest-cov"]
 
 [project.scripts]
-clop = "clop.clop:main"
+clop = "clop.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/baudrly/clop"
+Demo = "https://baudrly.github.io/clop"
 
 [tool.ruff]
-# Allow lambda functions
-lint.ignore = ["E731"]
-line-length = 79
+line-length = 130
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E731", "B905", "B023"]
+per-file-ignores = { "src/clop/report.py" = ["E501"] }
 
 [tool.pytest.ini_options]
-addopts = ["--doctest-modules"]
-testpaths = ["clop", "tests"]
+addopts = ["--doctest-modules", "-q"]
+testpaths = ["src/clop", "tests"]
 
 [build-system]
 requires = ["hatchling"]
