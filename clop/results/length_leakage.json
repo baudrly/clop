@@ -1,0 +1,43 @@
+{
+ "Actinidia chinensis (GFF3)": {
+  "n": 4663,
+  "classes": {
+   "CDS": 2606,
+   "intron": 2057
+  },
+  "length_only_macro_f1": 0.7171010389544731,
+  "chance_macro_f1": 0.5080858428121634,
+  "median_length": {
+   "CDS": 134.0,
+   "intron": 603.0
+  }
+ },
+ "Bacteroides fragilis (GenBank)": {
+  "n": 4267,
+  "classes": {
+   "CDS": 4170,
+   "rRNA": 18,
+   "tRNA": 79
+  },
+  "length_only_macro_f1": 0.6555238838794433,
+  "chance_macro_f1": 0.33417822703862227,
+  "median_length": {
+   "CDS": 954.0,
+   "rRNA": 1529.0,
+   "tRNA": 74.0
+  }
+ },
+ "A. thaliana chloroplast (GenBank)": {
+  "n": 122,
+  "classes": {
+   "CDS": 85,
+   "tRNA": 37
+  },
+  "length_only_macro_f1": 0.9315869582632379,
+  "chance_macro_f1": 0.47631160572337045,
+  "median_length": {
+   "CDS": 657.0,
+   "tRNA": 74.0
+  }
+ }
+}

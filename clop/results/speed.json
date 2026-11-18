@@ -1,0 +1,90 @@
+{
+ "cnn": {
+  "windows_per_second": 624.4915924144473,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "cnn-clip-loss": {
+  "windows_per_second": 562.7144189565972,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "cnn-meanmax": {
+  "windows_per_second": 510.90047270031033,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "cnn-no-crop": {
+  "windows_per_second": 555.6075644869546,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "cnn-no-rc": {
+  "windows_per_second": 1088.3903866527062,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "cnn-sigmoid-loss": {
+  "windows_per_second": 562.1434825235651,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "fcgr": {
+  "windows_per_second": 565.6132972213069,
+  "parameters": {
+   "dna": 197552,
+   "text": 44288,
+   "total": 241842
+  }
+ },
+ "lstm": {
+  "windows_per_second": 407.7228466235736,
+  "parameters": {
+   "dna": 887424,
+   "text": 44288,
+   "total": 931714
+  }
+ },
+ "lstm-clip-loss": {
+  "windows_per_second": 372.5103305253897,
+  "parameters": {
+   "dna": 887424,
+   "text": 44288,
+   "total": 931714
+  }
+ },
+ "main": {
+  "windows_per_second": 605.9134819759446,
+  "parameters": {
+   "dna": 206912,
+   "text": 44288,
+   "total": 251202
+  }
+ },
+ "transformer": {
+  "windows_per_second": 196.58015207191826,
+  "parameters": {
+   "dna": 564704,
+   "text": 44288,
+   "total": 608994
+  }
+ }
+}

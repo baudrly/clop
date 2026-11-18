@@ -1,0 +1,248 @@
+{
+ "model_config": {
+  "dna_encoder": "cnn",
+  "text_encoder": "bow",
+  "embed_dim": 128,
+  "width": 96,
+  "depth": 3,
+  "kernel": 15,
+  "k": 6,
+  "stride": 1,
+  "layers": 2,
+  "heads": 4,
+  "dropout": 0.1,
+  "rc": true,
+  "pooling": "moments",
+  "text_vocab_size": 10,
+  "text_width": 128,
+  "max_length": 4096,
+  "window": 500,
+  "temperature": 0.07
+ },
+ "train_config": {
+  "epochs": 10,
+  "batch_size": 256,
+  "lr": 0.002,
+  "weight_decay": 0.01,
+  "warmup": 0.1,
+  "loss": "multi_positive",
+  "crop_lengths": [
+   100,
+   500
+  ],
+  "random_rc": false,
+  "patience": 3,
+  "grad_clip": 1.0,
+  "amp": false,
+  "compile": false,
+  "workers": 0,
+  "seed": 0,
+  "eval_batch_size": 512
+ },
+ "parameters": {
+  "dna": 206912,
+  "text": 34304,
+  "total": 241218
+ },
+ "epochs_run": 8,
+ "best_epoch": 5,
+ "data": {
+  "train": {
+   "n": 3176,
+   "species": {
+    "unknown": 3176
+   },
+   "biotypes": {
+    "CDS": 1775,
+    "intron": 1401
+   },
+   "length": {
+    "min": 0,
+    "median": 178.5,
+    "max": 13128
+   }
+  },
+  "validation": {
+   "n": 710,
+   "species": {
+    "unknown": 710
+   },
+   "biotypes": {
+    "CDS": 388,
+    "intron": 322
+   },
+   "length": {
+    "min": 0,
+    "median": 173.0,
+    "max": 5411
+   }
+  },
+  "test": {
+   "n": 777,
+   "species": {
+    "unknown": 777
+   },
+   "biotypes": {
+    "CDS": 443,
+    "intron": 334
+   },
+   "length": {
+    "min": 0,
+    "median": 178.0,
+    "max": 12145
+   }
+  }
+ },
+ "validation": {
+  "zero_shot": {
+   "n": 710,
+   "species_accuracy": 1.0,
+   "species_macro_f1": 1.0,
+   "biotype_macro_f1_by_species": {
+    "unknown": 0.937810549114537
+   },
+   "biotype_macro_f1": 0.937810549114537,
+   "cell_accuracy": 0.9380281690140845,
+   "cell_macro_f1": 0.937810549114537
+  },
+  "retrieval": {
+   "text_to_dna_map": 0.9735436475215459,
+   "text_to_dna_p@1": 1.0,
+   "text_to_dna_p@10": 1.0,
+   "text_to_dna_p@100": 0.985,
+   "dna_to_text_mrr": 0.9690140845070423,
+   "dna_to_text_top1": 0.9380281690140845
+  },
+  "geometry": {
+   "silhouette": 0.7530055046081543,
+   "kmeans_ari": 0.8021278576559298,
+   "modality_gap": 1.2151192426681519,
+   "mean_cosine_to_own_prompt": 0.19260211288928986
+  },
+  "knn": {
+   "n": 710,
+   "species_accuracy": 1.0,
+   "species_macro_f1": 1.0,
+   "biotype_macro_f1_by_species": {
+    "unknown": 0.9489061600460564
+   },
+   "biotype_macro_f1": 0.9489061600460564,
+   "cell_accuracy": 0.9492957746478873,
+   "cell_macro_f1": 0.9489061600460564
+  },
+  "ensemble": {
+   "n": 710,
+   "species_accuracy": 1.0,
+   "species_macro_f1": 1.0,
+   "biotype_macro_f1_by_species": {
+    "unknown": 0.9489551380368098
+   },
+   "biotype_macro_f1": 0.9489551380368098,
+   "cell_accuracy": 0.9492957746478873,
+   "cell_macro_f1": 0.9489551380368098
+  }
+ },
+ "test": {
+  "zero_shot": {
+   "n": 777,
+   "species_accuracy": 1.0,
+   "species_macro_f1": 1.0,
+   "biotype_macro_f1_by_species": {
+    "unknown": 0.9196435720195362
+   },
+   "biotype_macro_f1": 0.9196435720195362,
+   "cell_accuracy": 0.9202059202059202,
+   "cell_macro_f1": 0.9196435720195362,
+   "species_macro_f1_ci": [
+    1.0,
+    1.0
+   ],
+   "cell_macro_f1_ci": [
+    0.900999661117797,
+    0.9388777490053921
+   ]
+  },
+  "retrieval": {
+   "text_to_dna_map": 0.9793784173707911,
+   "text_to_dna_p@1": 1.0,
+   "text_to_dna_p@10": 1.0,
+   "text_to_dna_p@100": 0.995,
+   "dna_to_text_mrr": 0.9601029601029601,
+   "dna_to_text_top1": 0.9202059202059202
+  },
+  "geometry": {
+   "silhouette": 0.7284783720970154,
+   "kmeans_ari": 0.7769103538353054,
+   "modality_gap": 1.214025855064392,
+   "mean_cosine_to_own_prompt": 0.19054166972637177
+  },
+  "knn": {
+   "n": 777,
+   "species_accuracy": 1.0,
+   "species_macro_f1": 1.0,
+   "biotype_macro_f1_by_species": {
+    "unknown": 0.9465785056335974
+   },
+   "biotype_macro_f1": 0.9465785056335974,
+   "cell_accuracy": 0.9472329472329473,
+   "cell_macro_f1": 0.9465785056335974,
+   "species_macro_f1_ci": [
+    1.0,
+    1.0
+   ],
+   "cell_macro_f1_ci": [
+    0.9325046658273547,
+    0.9615279694047714
+   ]
+  },
+  "ensemble": {
+   "n": 777,
+   "species_accuracy": 1.0,
+   "species_macro_f1": 1.0,
+   "biotype_macro_f1_by_species": {
+    "unknown": 0.945291230234835
+   },
+   "biotype_macro_f1": 0.945291230234835,
+   "cell_accuracy": 0.9459459459459459,
+   "cell_macro_f1": 0.945291230234835,
+   "species_macro_f1_ci": [
+    1.0,
+    1.0
+   ],
+   "cell_macro_f1_ci": [
+    0.9314067275740592,
+    0.9605118535036477
+   ]
+  }
+ },
+ "length": {
+  "by_length": {
+   "50": {
+    "species_macro_f1": 1.0,
+    "biotype_macro_f1": 0.6642524142524142,
+    "cell_macro_f1": 0.6642524142524142,
+    "label_bias": 0.2651222651222651
+   },
+   "100": {
+    "species_macro_f1": 1.0,
+    "biotype_macro_f1": 0.8466739639711054,
+    "cell_macro_f1": 0.8466739639711054,
+    "label_bias": 0.006435006435006435
+   },
+   "200": {
+    "species_macro_f1": 1.0,
+    "biotype_macro_f1": 0.8972918705920738,
+    "cell_macro_f1": 0.8972918705920738,
+    "label_bias": 0.039897039897039896
+   },
+   "500": {
+    "species_macro_f1": 1.0,
+    "biotype_macro_f1": 0.9090626379358774,
+    "cell_macro_f1": 0.9090626379358774,
+    "label_bias": 0.043758043758043756
+   }
+  },
+  "length_probe_r2": 0.5312832975218678,
+  "n": 777
+ }
+}

@@ -1,0 +1,6 @@
+{
+ "batch": 256,
+ "false_negatives_per_row": 6.6150390625,
+ "rows_with_duplicate": 0.98873046875,
+ "distinct_captions": 41.305
+}

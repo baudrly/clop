@@ -1,0 +1,269 @@
+{
+ "bacteroides": {
+  "species": "Bacteroides fragilis",
+  "n": 1290,
+  "gc": 0.4208806201550388,
+  "biotypes": {
+   "CDS": 600,
+   "rRNA": 3,
+   "tRNA": 70,
+   "promoter": 600,
+   "intergenic": 17
+  },
+  "called_species": {
+   "Escherichia coli": 484,
+   "Saccharomyces cerevisiae": 445,
+   "Drosophila melanogaster": 180,
+   "Arabidopsis thaliana": 98,
+   "Caenorhabditis elegans": 76,
+   "Homo sapiens": 7
+  },
+  "open_biotype_accuracy": 0.6177156177156177,
+  "closed_biotype_accuracy": 0.462015503875969,
+  "closed_biotype_macro_f1": 0.3859185067992687,
+  "closed_confusion": {
+   "CDS": {
+    "CDS": 339,
+    "intergenic": 180,
+    "promoter": 81
+   },
+   "intergenic": {
+    "CDS": 7,
+    "intergenic": 6,
+    "promoter": 4
+   },
+   "promoter": {
+    "intergenic": 213,
+    "promoter": 197,
+    "CDS": 189,
+    "tRNA": 1
+   },
+   "rRNA": {
+    "promoter": 3
+   },
+   "tRNA": {
+    "tRNA": 54,
+    "promoter": 11,
+    "intergenic": 5
+   }
+  },
+  "pooled_biotype_accuracy": 0.6503875968992248,
+  "pooled_confusion": {
+   "CDS": {
+    "CDS": 476,
+    "promoter": 106,
+    "intergenic": 18
+   },
+   "intergenic": {
+    "CDS": 9,
+    "promoter": 7,
+    "intergenic": 1
+   },
+   "promoter": {
+    "promoter": 306,
+    "CDS": 264,
+    "intergenic": 29,
+    "tRNA": 1
+   },
+   "rRNA": {
+    "promoter": 3
+   },
+   "tRNA": {
+    "tRNA": 56,
+    "promoter": 11,
+    "CDS": 3
+   }
+  },
+  "closed_chance": 0.2,
+  "retrieval_closed": {
+   "text_to_dna_map": NaN,
+   "text_to_dna_p@1": NaN,
+   "text_to_dna_p@10": NaN,
+   "text_to_dna_p@100": NaN,
+   "dna_to_text_mrr": NaN,
+   "dna_to_text_top1": NaN
+  },
+  "kmer_closed_biotype_accuracy": 0.5703185703185704,
+  "closed_biotype_accuracy_known": 0.4630924630924631,
+  "pooled_biotype_accuracy_known": 0.6519036519036518,
+  "kmer_open_biotype_accuracy": 0.5586635586635587
+ },
+ "chloroplast": {
+  "species": "Arabidopsis thaliana chloroplast",
+  "n": 233,
+  "gc": 0.3400429184549356,
+  "biotypes": {
+   "CDS": 82,
+   "tRNA": 31,
+   "rRNA": 6,
+   "promoter": 85,
+   "intergenic": 29
+  },
+  "called_species": {
+   "Arabidopsis thaliana": 104,
+   "Saccharomyces cerevisiae": 83,
+   "Drosophila melanogaster": 22,
+   "Caenorhabditis elegans": 19,
+   "Homo sapiens": 3,
+   "Escherichia coli": 2
+  },
+  "open_biotype_accuracy": 0.3392070484581498,
+  "closed_biotype_accuracy": 0.3261802575107296,
+  "closed_biotype_macro_f1": 0.28982455823162845,
+  "closed_confusion": {
+   "CDS": {
+    "intergenic": 45,
+    "CDS": 32,
+    "promoter": 4,
+    "tRNA": 1
+   },
+   "intergenic": {
+    "intergenic": 26,
+    "CDS": 3
+   },
+   "promoter": {
+    "intergenic": 60,
+    "CDS": 21,
+    "promoter": 4
+   },
+   "rRNA": {
+    "promoter": 6
+   },
+   "tRNA": {
+    "tRNA": 14,
+    "intergenic": 12,
+    "promoter": 4,
+    "CDS": 1
+   }
+  },
+  "pooled_biotype_accuracy": 0.40772532188841204,
+  "pooled_confusion": {
+   "CDS": {
+    "promoter": 31,
+    "intergenic": 26,
+    "CDS": 24,
+    "tRNA": 1
+   },
+   "intergenic": {
+    "intergenic": 23,
+    "promoter": 3,
+    "CDS": 3
+   },
+   "promoter": {
+    "promoter": 33,
+    "intergenic": 33,
+    "CDS": 19
+   },
+   "rRNA": {
+    "promoter": 6
+   },
+   "tRNA": {
+    "tRNA": 15,
+    "promoter": 7,
+    "intergenic": 7,
+    "CDS": 2
+   }
+  },
+  "closed_chance": 0.2,
+  "retrieval_closed": {
+   "text_to_dna_map": NaN,
+   "text_to_dna_p@1": NaN,
+   "text_to_dna_p@10": NaN,
+   "text_to_dna_p@100": NaN,
+   "dna_to_text_mrr": NaN,
+   "dna_to_text_top1": NaN
+  },
+  "kmer_closed_biotype_accuracy": 0.34801762114537443,
+  "closed_biotype_accuracy_known": 0.33480176211453744,
+  "pooled_biotype_accuracy_known": 0.4185022026431718,
+  "kmer_open_biotype_accuracy": 0.2555066079295154
+ },
+ "kiwifruit": {
+  "species": "Actinidia chinensis",
+  "n": 2281,
+  "gc": 0.3715300306882946,
+  "biotypes": {
+   "CDS": 600,
+   "intron": 600,
+   "promoter": 510,
+   "intergenic": 571
+  },
+  "called_species": {
+   "Arabidopsis thaliana": 1408,
+   "Homo sapiens": 293,
+   "Saccharomyces cerevisiae": 235,
+   "Caenorhabditis elegans": 181,
+   "Drosophila melanogaster": 161,
+   "Escherichia coli": 3
+  },
+  "open_biotype_accuracy": 0.3292415607189829,
+  "closed_biotype_accuracy": 0.45330995177553707,
+  "closed_biotype_macro_f1": 0.45807873178856945,
+  "closed_confusion": {
+   "CDS": {
+    "intron": 304,
+    "CDS": 190,
+    "promoter": 78,
+    "intergenic": 28
+   },
+   "intergenic": {
+    "intergenic": 244,
+    "intron": 176,
+    "promoter": 102,
+    "CDS": 49
+   },
+   "intron": {
+    "intron": 312,
+    "intergenic": 131,
+    "CDS": 104,
+    "promoter": 53
+   },
+   "promoter": {
+    "promoter": 288,
+    "intron": 130,
+    "CDS": 57,
+    "intergenic": 35
+   }
+  },
+  "pooled_biotype_accuracy": 0.4322665497588777,
+  "pooled_confusion": {
+   "CDS": {
+    "CDS": 316,
+    "intron": 162,
+    "promoter": 75,
+    "intergenic": 47
+   },
+   "intergenic": {
+    "intergenic": 229,
+    "intron": 144,
+    "CDS": 100,
+    "promoter": 98
+   },
+   "intron": {
+    "intron": 199,
+    "CDS": 189,
+    "intergenic": 151,
+    "promoter": 61
+   },
+   "promoter": {
+    "promoter": 242,
+    "CDS": 106,
+    "intergenic": 86,
+    "intron": 76
+   }
+  },
+  "closed_chance": 0.25,
+  "retrieval_closed": {
+   "text_to_dna_map": NaN,
+   "text_to_dna_p@1": NaN,
+   "text_to_dna_p@10": NaN,
+   "text_to_dna_p@100": NaN,
+   "dna_to_text_mrr": NaN,
+   "dna_to_text_top1": NaN
+  },
+  "kmer_closed_biotype_accuracy": 0.38404208680403334,
+  "closed_biotype_accuracy_known": 0.45330995177553707,
+  "pooled_biotype_accuracy_known": 0.4322665497588777,
+  "kmer_open_biotype_accuracy": 0.30030688294607627
+ }
+}

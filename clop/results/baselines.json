@@ -1,0 +1,146 @@
+{
+ "majority/ablation": {
+  "n": 14187,
+  "species_accuracy": 0.05638965249876648,
+  "species_macro_f1": 0.017793198549854318,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.05649717514124294,
+   "Caenorhabditis elegans": 0.047619047619047616,
+   "Drosophila melanogaster": 0.017107176460525193,
+   "Escherichia coli": 0.3333333333333333,
+   "Homo sapiens": 0.012421974472842458,
+   "Saccharomyces cerevisiae": 0.11627906976744187
+  },
+  "biotype_macro_f1": 0.0972096294657389,
+  "cell_accuracy": 0.02819482624938324,
+  "cell_macro_f1": 0.0012464398561608406
+ },
+ "4-mer logistic/ablation": {
+  "n": 14187,
+  "species_accuracy": 0.8662860365123,
+  "species_macro_f1": 0.8320522962933428,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.5075418385515483,
+   "Caenorhabditis elegans": 0.37885279321271687,
+   "Drosophila melanogaster": 0.24925512105299083,
+   "Escherichia coli": 0.7624866398734929,
+   "Homo sapiens": 0.23277012768024716,
+   "Saccharomyces cerevisiae": 0.6464702730562137
+  },
+  "biotype_macro_f1": 0.46289613223786824,
+  "cell_accuracy": 0.32325368294917883,
+  "cell_macro_f1": 0.30150336382034043
+ },
+ "6-mer logistic/ablation": {
+  "n": 14187,
+  "species_accuracy": 0.8397828998378798,
+  "species_macro_f1": 0.8057718278299079,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.49719413301789145,
+   "Caenorhabditis elegans": 0.3305807685229348,
+   "Drosophila melanogaster": 0.24404756719490686,
+   "Escherichia coli": 0.684968496849685,
+   "Homo sapiens": 0.22128648561708625,
+   "Saccharomyces cerevisiae": 0.6253010218436268
+  },
+  "biotype_macro_f1": 0.4338964121743552,
+  "cell_accuracy": 0.27581588778459154,
+  "cell_macro_f1": 0.29233316121040476
+ },
+ "4-mer kNN/ablation": {
+  "n": 14187,
+  "species_accuracy": 0.7691548600831747,
+  "species_macro_f1": 0.7198350085613305,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.4267047441722353,
+   "Caenorhabditis elegans": 0.27122046288516155,
+   "Drosophila melanogaster": 0.18735835626451658,
+   "Escherichia coli": 0.561938908614039,
+   "Homo sapiens": 0.20730916698475654,
+   "Saccharomyces cerevisiae": 0.37336067389885286
+  },
+  "biotype_macro_f1": 0.33798205213659366,
+  "cell_accuracy": 0.24409670825403537,
+  "cell_macro_f1": 0.20091144760305288
+ },
+ "majority/main": {
+  "n": 14187,
+  "species_accuracy": 0.05638965249876648,
+  "species_macro_f1": 0.017793198549854318,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.05649717514124294,
+   "Caenorhabditis elegans": 0.047619047619047616,
+   "Drosophila melanogaster": 0.017107176460525193,
+   "Escherichia coli": 0.3333333333333333,
+   "Homo sapiens": 0.012421974472842458,
+   "Saccharomyces cerevisiae": 0.11627906976744187
+  },
+  "biotype_macro_f1": 0.0972096294657389,
+  "cell_accuracy": 0.02819482624938324,
+  "cell_macro_f1": 0.0012464398561608406
+ },
+ "4-mer logistic/main": {
+  "n": 14187,
+  "species_accuracy": 0.8729823077465285,
+  "species_macro_f1": 0.8397592855885665,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.5407989388118633,
+   "Caenorhabditis elegans": 0.4031136692581134,
+   "Drosophila melanogaster": 0.2572739901432242,
+   "Escherichia coli": 0.7859687495599686,
+   "Homo sapiens": 0.2507598365815996,
+   "Saccharomyces cerevisiae": 0.6670056814690921
+  },
+  "biotype_macro_f1": 0.4841534776373102,
+  "cell_accuracy": 0.35384506942975963,
+  "cell_macro_f1": 0.3215198706622597,
+  "species_macro_f1_ci": [
+   0.8328229719052551,
+   0.8468280017424008
+  ],
+  "cell_macro_f1_ci": [
+   0.3125681631054953,
+   0.33052660192995104
+  ]
+ },
+ "6-mer logistic/main": {
+  "n": 14187,
+  "species_accuracy": 0.8542327482906886,
+  "species_macro_f1": 0.8191720651976793,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.4955885169179883,
+   "Caenorhabditis elegans": 0.3457558261113982,
+   "Drosophila melanogaster": 0.24569580057464488,
+   "Escherichia coli": 0.685,
+   "Homo sapiens": 0.24294778706337222,
+   "Saccharomyces cerevisiae": 0.6255508735056452
+  },
+  "biotype_macro_f1": 0.4400898006955081,
+  "cell_accuracy": 0.29632762388101785,
+  "cell_macro_f1": 0.30195372531902454,
+  "species_macro_f1_ci": [
+   0.8115631974611472,
+   0.8265851620194613
+  ],
+  "cell_macro_f1_ci": [
+   0.29382470897404395,
+   0.30944239394542855
+  ]
+ },
+ "4-mer kNN/main": {
+  "n": 14187,
+  "species_accuracy": 0.7874814971452738,
+  "species_macro_f1": 0.7343701600150988,
+  "biotype_macro_f1_by_species": {
+   "Arabidopsis thaliana": 0.4214227338004018,
+   "Caenorhabditis elegans": 0.3035546949602514,
+   "Drosophila melanogaster": 0.1757972384591063,
+   "Escherichia coli": 0.587180731455598,
+   "Homo sapiens": 0.21152510083675197,
+   "Saccharomyces cerevisiae": 0.4283010277010616
+  },
+  "biotype_macro_f1": 0.3546302545355285,
+  "cell_accuracy": 0.2602382462818073,
+  "cell_macro_f1": 0.20844837623070916
+ }
+}

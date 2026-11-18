@@ -1,0 +1,345 @@
+{
+ "model_config": {
+  "dna_encoder": "cnn",
+  "text_encoder": "bow",
+  "embed_dim": 128,
+  "width": 96,
+  "depth": 3,
+  "kernel": 15,
+  "k": 6,
+  "stride": 1,
+  "layers": 2,
+  "heads": 4,
+  "dropout": 0.1,
+  "rc": true,
+  "pooling": "meanmax",
+  "text_vocab_size": 88,
+  "text_width": 128,
+  "max_length": 4096,
+  "window": 500,
+  "temperature": 0.07
+ },
+ "train_config": {
+  "epochs": 10,
+  "batch_size": 256,
+  "lr": 0.002,
+  "weight_decay": 0.01,
+  "warmup": 0.1,
+  "loss": "multi_positive",
+  "crop_lengths": [
+   200,
+   500
+  ],
+  "random_rc": false,
+  "patience": 3,
+  "grad_clip": 1.0,
+  "amp": false,
+  "compile": false,
+  "workers": 0,
+  "seed": 0,
+  "eval_batch_size": 512
+ },
+ "parameters": {
+  "dna": 206912,
+  "text": 44288,
+  "total": 251202
+ },
+ "epochs_run": 10,
+ "best_epoch": 8,
+ "data": {
+  "train": {
+   "n": 12399,
+   "species": {
+    "Homo sapiens": 3900,
+    "Drosophila melanogaster": 2991,
+    "Arabidopsis thaliana": 1800,
+    "Caenorhabditis elegans": 1800,
+    "Saccharomyces cerevisiae": 1308,
+    "Escherichia coli": 600
+   },
+   "biotypes": {
+    "CDS": 1800,
+    "promoter": 1800,
+    "intergenic": 1200,
+    "intron": 1200,
+    "five_prime_UTR": 900,
+    "three_prime_UTR": 900,
+    "tRNA": 657,
+    "enhancer": 600,
+    "lncRNA": 600,
+    "transposable_element": 556,
+    "snoRNA": 454,
+    "miRNA": 446,
+    "pseudogene": 423,
+    "open_chromatin": 300,
+    "snRNA": 300,
+    "replication_origin": 263
+   },
+   "length": {
+    "min": 0,
+    "median": 500.0,
+    "max": 500
+   }
+  },
+  "validation": {
+   "n": 7194,
+   "species": {
+    "Homo sapiens": 2210,
+    "Drosophila melanogaster": 1781,
+    "Caenorhabditis elegans": 1200,
+    "Arabidopsis thaliana": 1096,
+    "Saccharomyces cerevisiae": 507,
+    "Escherichia coli": 400
+   },
+   "biotypes": {
+    "CDS": 1200,
+    "promoter": 1200,
+    "intergenic": 800,
+    "intron": 800,
+    "five_prime_UTR": 600,
+    "three_prime_UTR": 600,
+    "enhancer": 400,
+    "lncRNA": 400,
+    "pseudogene": 267,
+    "transposable_element": 243,
+    "open_chromatin": 200,
+    "tRNA": 156,
+    "miRNA": 129,
+    "snRNA": 99,
+    "snoRNA": 72,
+    "replication_origin": 28
+   },
+   "length": {
+    "min": 0,
+    "median": 500.0,
+    "max": 500
+   }
+  },
+  "test": {
+   "n": 14187,
+   "species": {
+    "Homo sapiens": 4554,
+    "Drosophila melanogaster": 3497,
+    "Caenorhabditis elegans": 2400,
+    "Arabidopsis thaliana": 1960,
+    "Saccharomyces cerevisiae": 976,
+    "Escherichia coli": 800
+   },
+   "biotypes": {
+    "CDS": 2400,
+    "promoter": 2400,
+    "intron": 1600,
+    "intergenic": 1481,
+    "five_prime_UTR": 1200,
+    "three_prime_UTR": 1200,
+    "enhancer": 800,
+    "lncRNA": 800,
+    "transposable_element": 469,
+    "pseudogene": 447,
+    "open_chromatin": 400,
+    "miRNA": 265,
+    "snRNA": 228,
+    "tRNA": 224,
+    "snoRNA": 213,
+    "replication_origin": 60
+   },
+   "length": {
+    "min": 0,
+    "median": 500.0,
+    "max": 500
+   }
+  }
+ },
+ "validation": {
+  "zero_shot": {
+   "n": 7194,
+   "species_accuracy": 0.8351403947734223,
+   "species_macro_f1": 0.794023701921528,
+   "biotype_macro_f1_by_species": {
+    "Arabidopsis thaliana": 0.5586196656232525,
+    "Caenorhabditis elegans": 0.28662733862716433,
+    "Drosophila melanogaster": 0.25881742833436233,
+    "Escherichia coli": 0.7640029123044865,
+    "Homo sapiens": 0.22706981082812197,
+    "Saccharomyces cerevisiae": 0.7218189936227392
+   },
+   "biotype_macro_f1": 0.46949269155668777,
+   "cell_accuracy": 0.30525437864887406,
+   "cell_macro_f1": 0.3000205783813991
+  },
+  "retrieval": {
+   "text_to_dna_map": 0.30179691742657244,
+   "text_to_dna_p@1": 0.45454545454545453,
+   "text_to_dna_p@10": 0.41590909090909095,
+   "text_to_dna_p@100": 0.3318181818181818,
+   "dna_to_text_mrr": 0.48398230583162727,
+   "dna_to_text_top1": 0.30525437864887406
+  },
+  "geometry": {
+   "silhouette": -0.13295862078666687,
+   "kmeans_ari": 0.12967263751087277,
+   "modality_gap": 0.4743088483810425,
+   "mean_cosine_to_own_prompt": 0.6418392658233643
+  },
+  "knn": {
+   "n": 7194,
+   "species_accuracy": 0.8444537114261885,
+   "species_macro_f1": 0.8019947502124117,
+   "biotype_macro_f1_by_species": {
+    "Arabidopsis thaliana": 0.5359231150090387,
+    "Caenorhabditis elegans": 0.288260399204422,
+    "Drosophila melanogaster": 0.239942511376237,
+    "Escherichia coli": 0.7297567811029927,
+    "Homo sapiens": 0.23093012360786364,
+    "Saccharomyces cerevisiae": 0.674025895467975
+   },
+   "biotype_macro_f1": 0.44980647096142157,
+   "cell_accuracy": 0.2878787878787879,
+   "cell_macro_f1": 0.30288684885041445
+  },
+  "ensemble": {
+   "n": 7194,
+   "species_accuracy": 0.8440366972477065,
+   "species_macro_f1": 0.8011841995472674,
+   "biotype_macro_f1_by_species": {
+    "Arabidopsis thaliana": 0.5687414222222981,
+    "Caenorhabditis elegans": 0.2899218590566492,
+    "Drosophila melanogaster": 0.2631329646906056,
+    "Escherichia coli": 0.7602205970507133,
+    "Homo sapiens": 0.2381595479993227,
+    "Saccharomyces cerevisiae": 0.7181405547842353
+   },
+   "biotype_macro_f1": 0.4730528243006374,
+   "cell_accuracy": 0.3020572699471782,
+   "cell_macro_f1": 0.30957336743184677
+  }
+ },
+ "test": {
+  "zero_shot": {
+   "n": 14187,
+   "species_accuracy": 0.8417565376753365,
+   "species_macro_f1": 0.8036354150406825,
+   "biotype_macro_f1_by_species": {
+    "Arabidopsis thaliana": 0.54735004129144,
+    "Caenorhabditis elegans": 0.2985111708279383,
+    "Drosophila melanogaster": 0.2511380388352953,
+    "Escherichia coli": 0.7486081993124247,
+    "Homo sapiens": 0.21905488005320545,
+    "Saccharomyces cerevisiae": 0.7280316308090565
+   },
+   "biotype_macro_f1": 0.46544899352156005,
+   "cell_accuracy": 0.3026009727215056,
+   "cell_macro_f1": 0.2916656120718883,
+   "species_macro_f1_ci": [
+    0.7953692868473577,
+    0.810731175936706
+   ],
+   "cell_macro_f1_ci": [
+    0.283962657888233,
+    0.29865309539118096
+   ]
+  },
+  "retrieval": {
+   "text_to_dna_map": 0.2992984222460421,
+   "text_to_dna_p@1": 0.4772727272727273,
+   "text_to_dna_p@10": 0.44772727272727264,
+   "text_to_dna_p@100": 0.38022727272727275,
+   "dna_to_text_mrr": 0.4856968798624699,
+   "dna_to_text_top1": 0.3026009727215056
+  },
+  "geometry": {
+   "silhouette": -0.12129667401313782,
+   "kmeans_ari": 0.1381967045181954,
+   "modality_gap": 0.4712359607219696,
+   "mean_cosine_to_own_prompt": 0.6435251832008362
+  },
+  "knn": {
+   "n": 14187,
+   "species_accuracy": 0.8515542397969973,
+   "species_macro_f1": 0.811907419973568,
+   "biotype_macro_f1_by_species": {
+    "Arabidopsis thaliana": 0.5660546619419621,
+    "Caenorhabditis elegans": 0.28619161289781553,
+    "Drosophila melanogaster": 0.2349555399848855,
+    "Escherichia coli": 0.744998406240039,
+    "Homo sapiens": 0.23204114627261674,
+    "Saccharomyces cerevisiae": 0.6810793707873901
+   },
+   "biotype_macro_f1": 0.45755345635411815,
+   "cell_accuracy": 0.29188693874674,
+   "cell_macro_f1": 0.30356490451106866,
+   "species_macro_f1_ci": [
+    0.8049861223575931,
+    0.818680831776426
+   ],
+   "cell_macro_f1_ci": [
+    0.2956216104564928,
+    0.31033431058465216
+   ]
+  },
+  "ensemble": {
+   "n": 14187,
+   "species_accuracy": 0.8507083950095158,
+   "species_macro_f1": 0.8121650991448927,
+   "biotype_macro_f1_by_species": {
+    "Arabidopsis thaliana": 0.5834183224252003,
+    "Caenorhabditis elegans": 0.30382030212811384,
+    "Drosophila melanogaster": 0.25501047680010025,
+    "Escherichia coli": 0.7573164705808768,
+    "Homo sapiens": 0.23806589206848106,
+    "Saccharomyces cerevisiae": 0.7098645107140131
+   },
+   "biotype_macro_f1": 0.4745826624527975,
+   "cell_accuracy": 0.30520899414957353,
+   "cell_macro_f1": 0.30846010139275537,
+   "species_macro_f1_ci": [
+    0.8044936322994359,
+    0.8193842716977449
+   ],
+   "cell_macro_f1_ci": [
+    0.3004925408390345,
+    0.3151377122195103
+   ]
+  }
+ },
+ "length": {
+  "by_length": {
+   "50": {
+    "species_macro_f1": 0.4333002825205982,
+    "biotype_macro_f1": 0.29288914693829154,
+    "cell_macro_f1": 0.09205846463533085,
+    "label_bias": 0.286
+   },
+   "100": {
+    "species_macro_f1": 0.5568558788409786,
+    "biotype_macro_f1": 0.3541712790197335,
+    "cell_macro_f1": 0.14518135618363484,
+    "label_bias": 0.24766666666666667
+   },
+   "200": {
+    "species_macro_f1": 0.6580210072443194,
+    "biotype_macro_f1": 0.4254146647322204,
+    "cell_macro_f1": 0.21323825808936772,
+    "label_bias": 0.21266666666666667
+   },
+   "500": {
+    "species_macro_f1": 0.7999634441426267,
+    "biotype_macro_f1": 0.45896474113419566,
+    "cell_macro_f1": 0.2837183975932645,
+    "label_bias": 0.20533333333333334
+   }
+  },
+  "length_probe_r2": {
+   "50-500": 0.6090568485158283,
+   "100-500": 0.4136179661447721,
+   "200-500": 0.18877959942455147
+  },
+  "pooled_probe_r2": {
+   "50-500": 0.9700275435119801,
+   "100-500": 0.9397651806513097,
+   "200-500": 0.833650754528852
+  },
+  "n": 3000
+ },
+ "wall_seconds": 791
+}

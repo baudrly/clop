@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLOP · DNA meets language</title>
+<meta name="description" content="Read any DNA sequence in your browser: CLOP places it in a shared DNA-text embedding, names its species and biotype from text prompts, scans long sequences, and finds sequences matching a description.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="atlas" aria-label="3D map of embedded genome windows"></canvas>
+<div id="labels" class="labels" aria-hidden="true"></div>
+<div class="tip" id="tip"></div>
+
+<header class="brand">
+  <div class="logo"><span>CL</span><span class="o">O</span><span>P</span></div>
+  <div><div class="title">Contrastive Language–Omics Pre-training</div>
+  <div class="subtitle">DNA and its annotation in one embedding space. Everything runs in your browser.</div></div>
+</header>
+
+<aside class="panel" id="panel">
+  <nav class="tabs" role="tablist">
+    <button class="on" data-tab="read" role="tab">Read DNA</button>
+    <button data-tab="search" role="tab">Search</button>
+    <button data-tab="prompts" role="tab">Prompts</button>
+    <button data-tab="model" role="tab">Model</button>
+  </nav>
+
+  <section data-pane="read">
+    <div class="drop" id="drop">
+      <textarea id="sequence" spellcheck="false" placeholder="Paste DNA (raw or FASTA, one or many records), or drop a FASTA file here"></textarea>
+    </div>
+    <div class="row">
+      <select id="exampleSelect" aria-label="Examples"></select>
+      <label class="file">Open file<input type="file" id="file" accept=".fa,.fasta,.fna,.txt,.seq"></label>
+    </div>
+    <div class="chips" id="probes"></div>
+    <div class="row"><button class="primary" id="read">Embed &amp; classify</button><span class="hint" id="readStatus"></span></div>
+
+    <div id="batch" class="result" hidden>
+      <h3>Records <span class="hint" id="batchHint"></span></h3>
+      <div class="tablewrap"><table id="batchTable"></table></div>
+      <button class="ghost" id="download">Download calls (TSV)</button>
+    </div>
+
+    <div id="readResult" class="result" hidden>
+      <div class="summary" id="summary"></div>
+      <h3>Species</h3><div class="bars" id="speciesBars"></div>
+      <h3>Biotype</h3><div class="bars" id="biotypeBars"></div>
+      <h3>Best species × biotype prompts</h3><div class="bars" id="cellBars"></div>
+      <div id="scanBlock" hidden>
+        <h3>Along the sequence <span class="hint" id="scanHint"></span></h3>
+        <canvas id="scan" class="chart" height="150"></canvas>
+        <div class="minilegend" id="scanLegend"></div>
+      </div>
+      <h3>Robustness</h3>
+      <div class="checks" id="checks"></div>
+      <canvas id="lengthChart" class="chart" height="110"></canvas>
+      <h3>Nearest annotated windows</h3>
+      <ol class="neighbours" id="neighbours"></ol>
+      <p class="note">The white star marks the sequence in the map, among its nearest neighbours.</p>
+    </div>
+  </section>
+
+  <section data-pane="search" hidden>
+    <label for="query">Describe what you are looking for</label>
+    <div class="row"><input id="query" placeholder="e.g. budding yeast transfer rna"><button class="primary" id="search">Search</button></div>
+    <div class="chips" id="queries"></div>
+    <div class="compose"><span>or compose a prompt from a species and a biotype:</span>
+      <select id="composeSpecies"></select><select id="composeBiotype"></select></div>
+    <div id="searchResult" class="result" hidden>
+      <p class="big" id="searchSummary"></p>
+      <div class="bars" id="searchBars"></div>
+      <canvas id="simHist" class="chart" height="90"></canvas>
+      <p class="note">Windows are ranked by the cosine between their DNA embedding and the embedding of your words: no
+        keyword ever touches a sequence. The histogram shows all similarities; the highlighted bins are the windows lit up in the map.</p>
+    </div>
+  </section>
+
+  <section data-pane="prompts" hidden>
+    <p class="note">Write your own classifier: one text prompt per line. CLOP calls each window by its most similar
+      prompt. Prompts can name a species, a biotype, both, or neither.</p>
+    <textarea id="customPrompts" spellcheck="false"></textarea>
+    <div class="chips" id="promptSets"></div>
+    <div class="row">
+      <button class="primary" id="paintMap">Colour the map</button>
+      <button class="ghost" id="classifyCustom">Classify the sequence</button>
+    </div>
+    <div id="customResult" class="result" hidden>
+      <h3 id="customTitle"></h3>
+      <div class="bars" id="customBars"></div>
+    </div>
+  </section>
+
+  <section data-pane="model" hidden>
+    <p><b>CLOP</b> trains a DNA encoder and a text encoder so that a sequence lands next to the words that describe it,
+      as CLIP does for images and captions. Any caption then becomes a classifier: <i>“mus musculus long non coding rna”</i>
+      is a prompt, and the call is the most similar prompt.</p>
+    <div class="stats-grid" id="modelStats"></div>
+    <p>The DNA encoder is a strand-invariant dilated CNN: a sequence and its reverse complement get the same embedding.
+      Its pooling is length-invariant (mean and mean square over interior positions), and sequences longer than the
+      training window are read as the mean of overlapping windows. The map shows held-out windows laid out in 3D with UMAP.</p>
+    <h3>How the prompts relate</h3>
+    <canvas id="heatmap" class="chart square"></canvas>
+    <p class="note">Cosine similarity between the label prompts (text side). Hover for names.</p>
+    <p>Code, paper and poster: <a href="https://github.com/baudrly/clop" target="_blank" rel="noopener">github.com/baudrly/clop</a></p>
+  </section>
+</aside>
+
+<aside class="legend-panel" id="legendPanel">
+  <div class="modes" id="modes"></div>
+  <label class="toggle"><input type="checkbox" id="showLabels" checked> prompt labels in the map</label>
+  <div class="legend" id="legend"></div>
+</aside>
+<footer class="stats" id="stats">loading model…</footer>
+
+<script src="clop-model.js"></script>
+<script src="clop-atlas.js"></script>
+<script src="atlas3d.js"></script>
+<script src="clop.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
